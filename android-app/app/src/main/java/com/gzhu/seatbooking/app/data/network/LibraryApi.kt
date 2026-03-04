@@ -1,4 +1,4 @@
-package com.preserveseat.app.data.network
+﻿package com.gzhu.seatbooking.app.data.network
 
 import android.content.Context
 import android.os.Handler
@@ -8,9 +8,9 @@ import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import com.preserveseat.app.data.model.OccupyBlock
-import com.preserveseat.app.data.model.RoomOption
-import com.preserveseat.app.data.model.SeatOption
+import com.gzhu.seatbooking.app.data.model.OccupyBlock
+import com.gzhu.seatbooking.app.data.model.RoomOption
+import com.gzhu.seatbooking.app.data.model.SeatOption
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import okhttp3.MediaType.Companion.toMediaType
@@ -629,3 +629,4 @@ class LibraryApi(
         return null
     }
 }
+

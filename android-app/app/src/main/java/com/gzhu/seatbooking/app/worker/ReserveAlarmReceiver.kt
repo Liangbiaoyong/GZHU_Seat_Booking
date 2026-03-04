@@ -1,4 +1,4 @@
-package com.preserveseat.app.worker
+﻿package com.gzhu.seatbooking.app.worker
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -7,7 +7,7 @@ import android.util.Log
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import com.preserveseat.app.PreserveSeatApp
+import com.gzhu.seatbooking.app.GzhuSeatBookingApp
 
 class ReserveAlarmReceiver : BroadcastReceiver() {
     private companion object {
@@ -45,8 +45,9 @@ class ReserveAlarmReceiver : BroadcastReceiver() {
     private fun appendLog(context: Context, level: String, message: String) {
         if (level == "ERROR") Log.e(TAG, message) else Log.i(TAG, message)
         runCatching {
-            val app = context.applicationContext as PreserveSeatApp
+            val app = context.applicationContext as GzhuSeatBookingApp
             app.logRepository.append(level, message)
         }
     }
 }
+

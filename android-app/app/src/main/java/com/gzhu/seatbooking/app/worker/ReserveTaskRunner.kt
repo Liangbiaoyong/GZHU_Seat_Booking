@@ -1,8 +1,8 @@
-package com.preserveseat.app.worker
+﻿package com.gzhu.seatbooking.app.worker
 
 import android.content.Context
-import com.preserveseat.app.PreserveSeatApp
-import com.preserveseat.app.data.model.ReservationResult
+import com.gzhu.seatbooking.app.GzhuSeatBookingApp
+import com.gzhu.seatbooking.app.data.model.ReservationResult
 import java.time.LocalTime
 
 object ReserveTaskRunner {
@@ -20,7 +20,7 @@ object ReserveTaskRunner {
         targetOffsetDays: Long,
         scheduledTriggerAtMillis: Long = 0L
     ): RunOutcome? {
-        val app = context.applicationContext as PreserveSeatApp
+        val app = context.applicationContext as GzhuSeatBookingApp
         return when (action) {
             Scheduler.ACTION_DAILY -> executeReserveAction(
                 context = context,
@@ -58,7 +58,7 @@ object ReserveTaskRunner {
         triggerSource: String,
         targetOffsetDays: Long
     ): RunOutcome? {
-        val app = context.applicationContext as PreserveSeatApp
+        val app = context.applicationContext as GzhuSeatBookingApp
         if (!Scheduler.tryConsumeExecutionToken(context, action, token, triggerSource)) {
             app.logRepository.append("INFO", "统一执行器退出：每日任务触发已消费 token=$token source=$triggerSource")
             return null
@@ -79,7 +79,7 @@ object ReserveTaskRunner {
         targetOffsetDays: Long,
         scheduledTriggerAtMillis: Long
     ): RunOutcome? {
-        val app = context.applicationContext as PreserveSeatApp
+        val app = context.applicationContext as GzhuSeatBookingApp
         val targetAction = Scheduler.ACTION_DAILY
         app.logRepository.append(
             "INFO",
@@ -113,3 +113,4 @@ object ReserveTaskRunner {
         return null
     }
 }
+

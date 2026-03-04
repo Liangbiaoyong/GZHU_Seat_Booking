@@ -1,8 +1,8 @@
-package com.preserveseat.app.data.local
+﻿package com.gzhu.seatbooking.app.data.local
 
 import android.content.Context
 import android.util.Log
-import com.preserveseat.app.data.model.ReservationResult
+import com.gzhu.seatbooking.app.data.model.ReservationResult
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -109,3 +109,4 @@ class ReservationResultRepository(private val context: Context) {
         return out
     }
 }
+

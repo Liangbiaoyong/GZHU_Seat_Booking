@@ -1,7 +1,7 @@
-package com.preserveseat.app.domain
+﻿package com.gzhu.seatbooking.app.domain
 
-import com.preserveseat.app.PreserveSeatApp
-import com.preserveseat.app.data.model.ReservationResult
+import com.gzhu.seatbooking.app.GzhuSeatBookingApp
+import com.gzhu.seatbooking.app.data.model.ReservationResult
 
 object ReservationResultPipeline {
     data class Summary(
@@ -10,7 +10,7 @@ object ReservationResultPipeline {
     )
 
     fun record(
-        app: PreserveSeatApp,
+        app: GzhuSeatBookingApp,
         scene: String,
         title: String,
         results: List<ReservationResult>
@@ -36,3 +36,4 @@ object ReservationResultPipeline {
         return Summary(successCount = successCount, failCount = failCount)
     }
 }
+

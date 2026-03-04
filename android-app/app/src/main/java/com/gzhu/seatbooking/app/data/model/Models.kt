@@ -1,4 +1,4 @@
-package com.preserveseat.app.data.model
+﻿package com.gzhu.seatbooking.app.data.model
 
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -78,3 +78,4 @@ data class LogEntry(
     val level: String,
     val message: String
 )
+

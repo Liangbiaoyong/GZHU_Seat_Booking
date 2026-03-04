@@ -1,14 +1,14 @@
-package com.preserveseat.app.domain
+﻿package com.gzhu.seatbooking.app.domain
 
-import com.preserveseat.app.data.local.ConfigStore
-import com.preserveseat.app.data.local.LogRepository
-import com.preserveseat.app.data.model.AppConfig
-import com.preserveseat.app.data.model.OccupyBlock
-import com.preserveseat.app.data.model.ReservationRequest
-import com.preserveseat.app.data.model.ReservationResult
-import com.preserveseat.app.data.model.RoomOption
-import com.preserveseat.app.data.model.SeatOption
-import com.preserveseat.app.data.network.LibraryApi
+import com.gzhu.seatbooking.app.data.local.ConfigStore
+import com.gzhu.seatbooking.app.data.local.LogRepository
+import com.gzhu.seatbooking.app.data.model.AppConfig
+import com.gzhu.seatbooking.app.data.model.OccupyBlock
+import com.gzhu.seatbooking.app.data.model.ReservationRequest
+import com.gzhu.seatbooking.app.data.model.ReservationResult
+import com.gzhu.seatbooking.app.data.model.RoomOption
+import com.gzhu.seatbooking.app.data.model.SeatOption
+import com.gzhu.seatbooking.app.data.network.LibraryApi
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.time.LocalDate
@@ -281,3 +281,4 @@ class ReservationEngine(
         return retryableKeywords.any { msg.contains(it.lowercase()) }
     }
 }
+

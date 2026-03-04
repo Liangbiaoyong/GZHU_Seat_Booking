@@ -16,11 +16,11 @@
 
 建议命名格式：
 
-`preserveseat-android-v<versionName>-<yyyyMMdd>-debug.apk`
+`GZHU_Seat_Booking-android-v<versionName>-<yyyyMMdd>-debug.apk`
 
 示例：
 
-`preserveseat-android-v1.0.7-20260304-debug.apk`
+`GZHU_Seat_Booking-android-v1.0.7-20260304-debug.apk`
 
 推荐输出目录：
 
@@ -55,7 +55,7 @@ git push -u origin main
 3. 创建 Release 并上传 APK（可使用 GitHub CLI）：
 
 ```powershell
-gh release create v1.0.7 android-app/releases/preserveseat-android-v1.0.7-20260304-debug.apk --title "v1.0.7" --notes "Standardized repo + full docs"
+gh release create v1.0.7 android-app/releases/GZHU_Seat_Booking-android-v1.0.7-20260304-debug.apk --title "v1.0.7" --notes "Rename to GZHU_Seat_Booking"
 ```
 
 ## 5. 常见故障

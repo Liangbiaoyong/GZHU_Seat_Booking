@@ -1,4 +1,4 @@
-# PreserveSeat01
+# 广州大学图书馆订座脚本APP
 
 广州大学图书馆座位自动预约项目（Android 主工程 + 辅助脚本）。
 
@@ -28,7 +28,3 @@
 - 通讯与认证：`android-app/docs/AUTH_COMMUNICATION.md`
 - 运维与发布：`android-app/docs/OPERATIONS.md`
 
-## 安全提醒
-
-- 账号、密码、token、cookie 属于敏感信息，请勿提交到仓库。
-- `local.properties`、`app_*.json`、构建产物与日志已被 `.gitignore` 忽略。

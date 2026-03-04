@@ -1,4 +1,4 @@
-# PreserveSeat Android App
+﻿# 广州大学图书馆订座脚本APP（Android）
 
 图书馆座位自动预约 Android 客户端（Kotlin + Jetpack Compose）。
 
@@ -28,10 +28,10 @@
 
 ## 模块结构
 
-- `app/src/main/java/com/preserveseat/app/ui`：界面与状态管理
-- `app/src/main/java/com/preserveseat/app/domain`：预约流程与业务规则
-- `app/src/main/java/com/preserveseat/app/data`：本地存储与网络访问
-- `app/src/main/java/com/preserveseat/app/worker`：定时调度、前台服务、任务执行器
+- `app/src/main/java/com/gzhu/seatbooking/app/ui`：界面与状态管理
+- `app/src/main/java/com/gzhu/seatbooking/app/domain`：预约流程与业务规则
+- `app/src/main/java/com/gzhu/seatbooking/app/data`：本地存储与网络访问
+- `app/src/main/java/com/gzhu/seatbooking/app/worker`：定时调度、前台服务、任务执行器
 
 ## 详细文档
 
@@ -40,7 +40,7 @@
 - `docs/AUTH_COMMUNICATION.md`：通信认证与会话生命周期
 - `docs/OPERATIONS.md`：部署、打包、排障、发布流程
 
-## 合规与安全
+## 合规
 
-- 不要将账号、密码、token、cookie 或日志快照提交到 Git。
 - 请遵守目标系统使用规范，避免过高频率请求。
+

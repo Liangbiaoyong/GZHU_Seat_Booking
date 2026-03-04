@@ -1,4 +1,4 @@
-package com.preserveseat.app.worker
+﻿package com.gzhu.seatbooking.app.worker
 
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -15,7 +15,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import com.preserveseat.app.PreserveSeatApp
+import com.gzhu.seatbooking.app.GzhuSeatBookingApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -25,8 +25,8 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 
 object Scheduler {
-    const val ACTION_DAILY = "com.preserveseat.app.action.DAILY_RESERVE"
-    const val ACTION_DAILY_PRECHECK = "com.preserveseat.app.action.DAILY_PRECHECK"
+    const val ACTION_DAILY = "com.gzhu.seatbooking.app.action.DAILY_RESERVE"
+    const val ACTION_DAILY_PRECHECK = "com.gzhu.seatbooking.app.action.DAILY_PRECHECK"
 
     const val EXTRA_CAPTCHA = "extra_captcha"
     const val EXTRA_TEST_TOKEN = "extra_test_token"
@@ -328,7 +328,7 @@ object Scheduler {
     private fun appendLog(context: Context, level: String, message: String) {
         if (level == "ERROR") Log.e(TAG, message) else Log.i(TAG, message)
         runCatching {
-            val app = context.applicationContext as PreserveSeatApp
+            val app = context.applicationContext as GzhuSeatBookingApp
             app.logRepository.append(level, message)
         }
     }
@@ -338,3 +338,4 @@ object Scheduler {
         return dt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
     }
 }
+

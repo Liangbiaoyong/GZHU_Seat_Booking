@@ -1,14 +1,14 @@
-package com.preserveseat.app.worker
+﻿package com.gzhu.seatbooking.app.worker
 
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.preserveseat.app.PreserveSeatApp
-import com.preserveseat.app.domain.ReservationResultPipeline
+import com.gzhu.seatbooking.app.GzhuSeatBookingApp
+import com.gzhu.seatbooking.app.domain.ReservationResultPipeline
 
 class AlarmDispatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
-        val app = applicationContext as PreserveSeatApp
+        val app = applicationContext as GzhuSeatBookingApp
         val action = inputData.getString(KEY_ACTION).orEmpty()
         val captcha = inputData.getString(Scheduler.EXTRA_CAPTCHA).orEmpty()
         val token = inputData.getString(Scheduler.EXTRA_TEST_TOKEN).orEmpty()
@@ -49,3 +49,4 @@ class AlarmDispatchWorker(appContext: Context, params: WorkerParameters) : Corou
         const val KEY_ACTION = "action"
     }
 }
+

@@ -1,4 +1,4 @@
-package com.preserveseat.app.domain
+﻿package com.gzhu.seatbooking.app.domain
 
 object SeatMapper {
     private const val ROOM_103_BASE_DEV_ID_OFFSET = 101267043
@@ -10,3 +10,4 @@ object SeatMapper {
         return ROOM_103_BASE_DEV_ID_OFFSET + seatNumber
     }
 }
+

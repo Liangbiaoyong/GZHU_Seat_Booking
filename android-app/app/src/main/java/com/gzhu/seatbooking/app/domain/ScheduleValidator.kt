@@ -1,4 +1,4 @@
-package com.preserveseat.app.domain
+﻿package com.gzhu.seatbooking.app.domain
 
 import java.time.LocalTime
 
@@ -21,3 +21,4 @@ object ScheduleValidator {
 
     private fun isFiveMinuteStep(time: LocalTime): Boolean = time.minute % 5 == 0
 }
+

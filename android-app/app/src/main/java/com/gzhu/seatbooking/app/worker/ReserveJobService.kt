@@ -1,4 +1,4 @@
-package com.preserveseat.app.worker
+﻿package com.gzhu.seatbooking.app.worker
 
 import android.app.job.JobParameters
 import android.app.job.JobService
@@ -6,7 +6,7 @@ import android.util.Log
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import com.preserveseat.app.PreserveSeatApp
+import com.gzhu.seatbooking.app.GzhuSeatBookingApp
 
 class ReserveJobService : JobService() {
     private companion object {
@@ -48,8 +48,9 @@ class ReserveJobService : JobService() {
     private fun appendLog(level: String, message: String) {
         if (level == "ERROR") Log.e(TAG, message) else Log.i(TAG, message)
         runCatching {
-            val app = applicationContext as PreserveSeatApp
+            val app = applicationContext as GzhuSeatBookingApp
             app.logRepository.append(level, message)
         }
     }
 }
+

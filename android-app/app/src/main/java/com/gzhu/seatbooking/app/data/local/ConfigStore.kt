@@ -1,11 +1,11 @@
-package com.preserveseat.app.data.local
+﻿package com.gzhu.seatbooking.app.data.local
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.preserveseat.app.data.model.AppConfig
-import com.preserveseat.app.data.model.TimeRangeConfig
+import com.gzhu.seatbooking.app.data.model.AppConfig
+import com.gzhu.seatbooking.app.data.model.TimeRangeConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -111,3 +111,4 @@ class ConfigStore(private val context: Context) {
         )
     }
 }
+

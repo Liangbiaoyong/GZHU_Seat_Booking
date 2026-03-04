@@ -1,4 +1,4 @@
-package com.preserveseat.app.worker
+﻿package com.gzhu.seatbooking.app.worker
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -9,8 +9,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import com.preserveseat.app.PreserveSeatApp
-import com.preserveseat.app.domain.ReservationResultPipeline
+import com.gzhu.seatbooking.app.GzhuSeatBookingApp
+import com.gzhu.seatbooking.app.domain.ReservationResultPipeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,7 +59,7 @@ class ReserveForegroundService : Service() {
 
         serviceScope.launch {
             try {
-                val app = application as PreserveSeatApp
+                val app = application as GzhuSeatBookingApp
                 val outcome = ReserveTaskRunner.run(
                     context = this@ReserveForegroundService,
                     action = action,
@@ -73,7 +73,7 @@ class ReserveForegroundService : Service() {
                     appendLog("INFO", "统一执行器未返回结果，可能已去重 action=$action source=$triggerSource")
                     return@launch
                 }
-                val appForResult = application as PreserveSeatApp
+                val appForResult = application as GzhuSeatBookingApp
                 val summary = ReservationResultPipeline.record(appForResult, triggerSource, outcome.title, outcome.results)
                 appendLog("INFO", "前台服务执行结束：${outcome.title} 成功${summary.successCount}，失败${summary.failCount}")
                 ReserveNotifier.notifyReservationResult(this@ReserveForegroundService, triggerSource, outcome.title, outcome.results)
@@ -122,7 +122,7 @@ class ReserveForegroundService : Service() {
 
     private fun appendLog(level: String, message: String) {
         runCatching {
-            val app = application as PreserveSeatApp
+            val app = application as GzhuSeatBookingApp
             app.logRepository.append(level, message)
         }
         if (level == "ERROR") {
@@ -132,3 +132,4 @@ class ReserveForegroundService : Service() {
         }
     }
 }
+

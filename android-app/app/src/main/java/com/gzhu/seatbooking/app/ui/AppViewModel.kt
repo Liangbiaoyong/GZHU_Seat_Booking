@@ -1,18 +1,18 @@
-package com.preserveseat.app.ui
+﻿package com.gzhu.seatbooking.app.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.preserveseat.app.PreserveSeatApp
-import com.preserveseat.app.data.model.AppConfig
-import com.preserveseat.app.data.model.OccupyBlock
-import com.preserveseat.app.data.model.ReservationResult
-import com.preserveseat.app.data.model.RoomOption
-import com.preserveseat.app.data.model.SeatOption
-import com.preserveseat.app.data.model.TimeRangeConfig
-import com.preserveseat.app.domain.ReservationResultPipeline
-import com.preserveseat.app.domain.ScheduleValidator
-import com.preserveseat.app.worker.Scheduler
+import com.gzhu.seatbooking.app.GzhuSeatBookingApp
+import com.gzhu.seatbooking.app.data.model.AppConfig
+import com.gzhu.seatbooking.app.data.model.OccupyBlock
+import com.gzhu.seatbooking.app.data.model.ReservationResult
+import com.gzhu.seatbooking.app.data.model.RoomOption
+import com.gzhu.seatbooking.app.data.model.SeatOption
+import com.gzhu.seatbooking.app.data.model.TimeRangeConfig
+import com.gzhu.seatbooking.app.domain.ReservationResultPipeline
+import com.gzhu.seatbooking.app.domain.ScheduleValidator
+import com.gzhu.seatbooking.app.worker.Scheduler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,7 +55,7 @@ data class UiState(
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
-    private val app = application as PreserveSeatApp
+    private val app = application as GzhuSeatBookingApp
     private var scheduleSyncJob: Job? = null
     private var scheduleMutationVersion: Long = 0L
 
@@ -394,3 +394,4 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 }
+

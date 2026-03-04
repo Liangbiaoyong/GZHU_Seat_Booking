@@ -1,14 +1,14 @@
-plugins {
+﻿plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
 android {
-    namespace = "com.preserveseat.app"
+    namespace = "com.gzhu.seatbooking.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.preserveseat.app"
+        applicationId = "com.gzhu.seatbooking.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 8
@@ -63,3 +63,4 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+

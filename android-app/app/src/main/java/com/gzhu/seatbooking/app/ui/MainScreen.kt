@@ -1,4 +1,4 @@
-package com.preserveseat.app.ui
+﻿package com.gzhu.seatbooking.app.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -59,12 +59,12 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.preserveseat.app.data.model.AppConfig
-import com.preserveseat.app.data.model.OccupyBlock
-import com.preserveseat.app.data.model.ReservationResult
-import com.preserveseat.app.data.model.RoomOption
-import com.preserveseat.app.data.model.SeatOption
-import com.preserveseat.app.data.model.TimeRangeConfig
+import com.gzhu.seatbooking.app.data.model.AppConfig
+import com.gzhu.seatbooking.app.data.model.OccupyBlock
+import com.gzhu.seatbooking.app.data.model.ReservationResult
+import com.gzhu.seatbooking.app.data.model.RoomOption
+import com.gzhu.seatbooking.app.data.model.SeatOption
+import com.gzhu.seatbooking.app.data.model.TimeRangeConfig
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
@@ -719,3 +719,4 @@ private fun generateEndOptions(rule: SeatOption?, startText: String): List<Strin
     }
     return result
 }
+

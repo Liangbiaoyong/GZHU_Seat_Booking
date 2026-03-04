@@ -1,4 +1,4 @@
-package com.preserveseat.app.worker
+﻿package com.gzhu.seatbooking.app.worker
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,8 +7,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.preserveseat.app.PreserveSeatApp
-import com.preserveseat.app.data.model.ReservationResult
+import com.gzhu.seatbooking.app.GzhuSeatBookingApp
+import com.gzhu.seatbooking.app.data.model.ReservationResult
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -69,7 +69,7 @@ object ReserveNotifier {
 
     private fun appendLog(context: Context, level: String, message: String) {
         runCatching {
-            val app = context.applicationContext as PreserveSeatApp
+            val app = context.applicationContext as GzhuSeatBookingApp
             app.logRepository.append(level, message)
         }
     }
@@ -84,3 +84,4 @@ object ReserveNotifier {
         }
     }
 }
+

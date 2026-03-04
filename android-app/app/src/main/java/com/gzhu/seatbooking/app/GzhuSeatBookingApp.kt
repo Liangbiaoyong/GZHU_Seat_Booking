@@ -1,13 +1,13 @@
-package com.preserveseat.app
+﻿package com.gzhu.seatbooking.app
 
 import android.app.Application
-import com.preserveseat.app.data.local.ConfigStore
-import com.preserveseat.app.data.local.LogRepository
-import com.preserveseat.app.data.local.ReservationResultRepository
-import com.preserveseat.app.data.network.LibraryApi
-import com.preserveseat.app.domain.ReservationEngine
+import com.gzhu.seatbooking.app.data.local.ConfigStore
+import com.gzhu.seatbooking.app.data.local.LogRepository
+import com.gzhu.seatbooking.app.data.local.ReservationResultRepository
+import com.gzhu.seatbooking.app.data.network.LibraryApi
+import com.gzhu.seatbooking.app.domain.ReservationEngine
 
-class PreserveSeatApp : Application() {
+class GzhuSeatBookingApp : Application() {
     lateinit var configStore: ConfigStore
     lateinit var logRepository: LogRepository
     lateinit var reservationResultRepository: ReservationResultRepository
@@ -25,3 +25,4 @@ class PreserveSeatApp : Application() {
         )
     }
 }
+

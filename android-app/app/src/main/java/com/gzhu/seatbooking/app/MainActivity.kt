@@ -1,4 +1,4 @@
-package com.preserveseat.app
+﻿package com.gzhu.seatbooking.app
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -10,8 +10,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
 import androidx.activity.viewModels
-import com.preserveseat.app.ui.AppViewModel
-import com.preserveseat.app.ui.MainScreen
+import com.gzhu.seatbooking.app.ui.AppViewModel
+import com.gzhu.seatbooking.app.ui.MainScreen
 
 class MainActivity : ComponentActivity() {
     private val vm by viewModels<AppViewModel>()
@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
     ) { granted ->
         if (!granted) {
             runCatching {
-                val app = application as PreserveSeatApp
+                val app = application as GzhuSeatBookingApp
                 app.logRepository.append("ERROR", "通知权限未授予，预约成功通知可能无法弹出")
             }
         }
@@ -46,3 +46,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
