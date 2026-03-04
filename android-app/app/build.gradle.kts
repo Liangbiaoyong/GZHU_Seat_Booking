@@ -1,6 +1,20 @@
-﻿plugins {
+﻿import org.gradle.api.GradleException
+import java.util.Properties
+
+plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun getSigningValue(key: String): String? {
+    return (System.getenv(key) ?: localProperties.getProperty(key))?.takeIf { it.isNotBlank() }
 }
 
 android {
@@ -18,9 +32,29 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    signingConfigs {
+        create("release") {
+            val storePath = getSigningValue("RELEASE_STORE_FILE") ?: "../keystore/gzhu-release.jks"
+            val storePass = getSigningValue("RELEASE_STORE_PASSWORD")
+            val keyAliasValue = getSigningValue("RELEASE_KEY_ALIAS")
+            val keyPass = getSigningValue("RELEASE_KEY_PASSWORD")
+
+            storeFile = file(storePath)
+
+            if (storePass != null && keyAliasValue != null && keyPass != null) {
+                storePassword = storePass
+                keyAlias = keyAliasValue
+                keyPassword = keyPass
+            } else {
+                throw GradleException("Missing release signing secrets: RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
