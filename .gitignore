@@ -1,0 +1,54 @@
+# ===== Global =====
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.bak
+*.old
+*.orig
+
+# ===== VS Code / IDE =====
+.vscode/
+!.vscode/extensions.json
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# ===== Build / Artifacts =====
+OUTPUT/
+*.apk
+*.aab
+*.ap_
+*.keystore
+*.jks
+*.log
+*.hprof
+
+# ===== Archives =====
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+
+# ===== Android / Gradle =====
+android-app/.gradle/
+android-app/local.properties
+android-app/captures/
+android-app/.idea/
+android-app/app/build/
+android-app/build/
+android-app/gradle-*/
+
+# ===== Local runtime config / dumps =====
+android-app/app_*.json
+android-app/hs_err_pid*.log
+android-app/replay_pid*.log
