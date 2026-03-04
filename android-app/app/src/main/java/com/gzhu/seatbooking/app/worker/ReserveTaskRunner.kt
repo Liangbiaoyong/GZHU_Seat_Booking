@@ -59,13 +59,17 @@ object ReserveTaskRunner {
         targetOffsetDays: Long
     ): RunOutcome? {
         val app = context.applicationContext as GzhuSeatBookingApp
+        val config = app.configStore.getConfig()
+        val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 16))
         if (!Scheduler.tryConsumeExecutionToken(context, action, token, triggerSource)) {
-            app.logRepository.append("INFO", "统一执行器退出：每日任务触发已消费 token=$token source=$triggerSource")
+            Scheduler.scheduleDaily(context, trigger, config.autoEnabled)
+            app.logRepository.append(
+                "INFO",
+                "统一执行器去重命中：已消费 token=$token source=$triggerSource，已重建下一轮Alarm+Work+Job调度"
+            )
             return null
         }
-        val config = app.configStore.getConfig()
         val results = app.reservationEngine.runForTomorrowBatch(captcha)
-        val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 16))
         Scheduler.scheduleDaily(context, trigger, config.autoEnabled)
         return RunOutcome(title = "每日预约", results = results)
     }

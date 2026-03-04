@@ -1,5 +1,4 @@
-﻿import org.gradle.api.GradleException
-import java.util.Properties
+﻿import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -25,8 +24,8 @@ android {
         applicationId = "com.gzhu.seatbooking.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 9
+        versionName = "1.0.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -45,8 +44,6 @@ android {
                 storePassword = storePass
                 keyAlias = keyAliasValue
                 keyPassword = keyPass
-            } else {
-                throw GradleException("Missing release signing secrets: RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD")
             }
         }
     }
