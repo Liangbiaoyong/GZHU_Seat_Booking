@@ -17,6 +17,7 @@ import com.gzhu.seatbooking.app.data.model.ReservationResult
 import com.gzhu.seatbooking.app.data.model.RoomOption
 import com.gzhu.seatbooking.app.data.model.SeatOption
 import com.gzhu.seatbooking.app.data.model.TimeRangeConfig
+import com.gzhu.seatbooking.app.data.model.buildDefaultSlotByIndex
 import com.gzhu.seatbooking.app.domain.ReservationResultPipeline
 import com.gzhu.seatbooking.app.domain.ScheduleValidator
 import com.gzhu.seatbooking.app.worker.Scheduler
@@ -378,9 +379,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val cfg = _uiState.value.config
             val current = cfg.weekSchedule[day].orEmpty()
-            val selectedSeat = _uiState.value.seatOptions.firstOrNull { it.devId == cfg.seatDevId }
             val updated = cfg.copy(weekSchedule = cfg.weekSchedule.toMutableMap().apply {
-                put(day, current + createDefaultSlot(selectedSeat))
+                put(day, current + createDefaultSlot(current.size))
             })
             app.configStore.save(updated)
             _uiState.value = _uiState.value.copy(config = updated, weekServiceStates = buildWeekServiceStates(updated))
@@ -393,8 +393,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val cfg = _uiState.value.config
             val current = cfg.weekSchedule[day].orEmpty()
-            val selectedSeat = _uiState.value.seatOptions.firstOrNull { it.devId == cfg.seatDevId }
-            val filtered = current.filterNot { it.id == slotId }.ifEmpty { listOf(createDefaultSlot(selectedSeat)) }
+            val filtered = current.filterNot { it.id == slotId }.ifEmpty { listOf(createDefaultSlot(0)) }
             val updated = cfg.copy(weekSchedule = cfg.weekSchedule.toMutableMap().apply { put(day, filtered) })
             app.configStore.save(updated)
             _uiState.value = _uiState.value.copy(config = updated, weekServiceStates = buildWeekServiceStates(updated))
@@ -496,17 +495,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }.getOrDefault("--")
     }
 
-    private fun createDefaultSlot(seatRule: SeatOption?): TimeRangeConfig {
-        if (seatRule == null) return TimeRangeConfig()
-        val openStart = runCatching { LocalTime.parse(seatRule.openStart.take(5)) }.getOrDefault(LocalTime.of(8, 30))
-        val openEnd = runCatching { LocalTime.parse(seatRule.openEnd.take(5)) }.getOrDefault(LocalTime.of(22, 15))
-        val maxEnd = openStart.plusMinutes(seatRule.maxResvMinutes.toLong())
-        val end = if (maxEnd.isBefore(openEnd)) maxEnd else openEnd
-        return TimeRangeConfig(
-            start = openStart.format(DateTimeFormatter.ofPattern("HH:mm")),
-            end = end.format(DateTimeFormatter.ofPattern("HH:mm")),
-            enabled = false
-        )
+    private fun createDefaultSlot(index: Int): TimeRangeConfig {
+        return buildDefaultSlotByIndex(index)
     }
 
     private fun sha256Hex(value: String): String {

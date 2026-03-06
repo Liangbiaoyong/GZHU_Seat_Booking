@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.gzhu.seatbooking.app.data.model.AppConfig
 import com.gzhu.seatbooking.app.data.model.TimeRangeConfig
+import com.gzhu.seatbooking.app.data.model.buildDefaultSlotByIndex
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -76,24 +77,24 @@ class ConfigStore(private val context: Context) {
                             add(
                                 TimeRangeConfig(
                                     id = obj.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
-                                    start = obj.optString("start", "20:00"),
-                                    end = obj.optString("end", "22:15"),
+                                    start = obj.optString("start", buildDefaultSlotByIndex(index).start),
+                                    end = obj.optString("end", buildDefaultSlotByIndex(index).end),
                                     enabled = obj.optBoolean("enabled", true)
                                 )
                             )
                         }
-                    }.ifEmpty { listOf(TimeRangeConfig()) }
+                    }.ifEmpty { listOf(buildDefaultSlotByIndex(0)) }
                 }
                 raw is JSONObject -> {
                     listOf(
                         TimeRangeConfig(
-                            start = raw.optString("start", "20:00"),
-                            end = raw.optString("end", "22:15"),
+                            start = raw.optString("start", buildDefaultSlotByIndex(0).start),
+                            end = raw.optString("end", buildDefaultSlotByIndex(0).end),
                             enabled = raw.optBoolean("enabled", true)
                         )
                     )
                 }
-                else -> listOf(TimeRangeConfig())
+                else -> listOf(buildDefaultSlotByIndex(0))
             }
         }
         return AppConfig(

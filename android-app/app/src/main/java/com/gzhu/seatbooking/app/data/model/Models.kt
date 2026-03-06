@@ -8,10 +8,20 @@ import java.util.UUID
 
 data class TimeRangeConfig(
     val id: String = UUID.randomUUID().toString(),
-    val start: String = "20:00",
-    val end: String = "22:15",
+    val start: String = "09:00",
+    val end: String = "13:00",
     val enabled: Boolean = false
 )
+
+fun buildDefaultSlotByIndex(index: Int): TimeRangeConfig {
+    return when (index) {
+        0 -> TimeRangeConfig(start = "09:00", end = "13:00", enabled = false)
+        1 -> TimeRangeConfig(start = "13:00", end = "16:00", enabled = false)
+        2 -> TimeRangeConfig(start = "16:00", end = "20:00", enabled = false)
+        3 -> TimeRangeConfig(start = "20:00", end = "22:15", enabled = false)
+        else -> TimeRangeConfig(start = "", end = "", enabled = false)
+    }
+}
 
 data class AppConfig(
     val account: String = "",
@@ -23,7 +33,7 @@ data class AppConfig(
     val roomName: String = "",
     val seatCode: String = "",
     val seatDevId: Int = 0,
-    val weekSchedule: Map<DayOfWeek, List<TimeRangeConfig>> = DayOfWeek.entries.associateWith { listOf(TimeRangeConfig()) },
+    val weekSchedule: Map<DayOfWeek, List<TimeRangeConfig>> = DayOfWeek.entries.associateWith { listOf(buildDefaultSlotByIndex(0)) },
     val token: String = "",
     val cookieHeader: String = "",
     val lastRunAt: String = ""
