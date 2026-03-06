@@ -66,6 +66,15 @@ object ReserveTaskRunner {
         val config = app.configStore.getConfig()
         val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 15))
         if (!Scheduler.tryConsumeExecutionToken(context, action, token, triggerSource)) {
+            val status = runCatching { Scheduler.queryServiceStatus(context) }.getOrNull()
+            val health = status?.let { Scheduler.evaluateDailyHealth(it) }
+            if (config.autoEnabled && health != null && !health.allReady) {
+                runCatching { Scheduler.scheduleDaily(context, trigger, config.autoEnabled) }
+                app.logRepository.append(
+                    "WARN",
+                    "去重命中但检测到通道缺失，已触发自愈重建：missing=${health.missing.joinToString(",")}" 
+                )
+            }
             app.logRepository.append(
                 "INFO",
                 "统一执行器去重命中：已消费 token=$token source=$triggerSource，跳过本通道重建以避免中断正在执行的任务"
@@ -118,7 +127,8 @@ object ReserveTaskRunner {
             app.logRepository.append("ERROR", "统一执行器异常：source=$triggerSource token=$token ${failed.message}")
         } finally {
             app.logRepository.append("INFO", "每日预约执行结束：任务数=${results.size}")
-            Scheduler.scheduleDaily(context, trigger, config.autoEnabled)
+            runCatching { Scheduler.scheduleDaily(context, trigger, config.autoEnabled) }
+                .onFailure { app.logRepository.append("ERROR", "每日预约结束后重建通道失败：${it.message.orEmpty()}") }
         }
         return RunOutcome(title = "每日预约", results = results)
     }

@@ -448,11 +448,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
             if (config.autoEnabled && dailyState != null) {
                 val now = System.currentTimeMillis()
-                val hasAnyChannel = dailyState.alarmEnabled || dailyState.workEnabled || dailyState.jobEnabled
-                if (!hasAnyChannel) {
+                val health = Scheduler.evaluateDailyHealth(schedulerStatus)
+                if (!health.allReady) {
                     val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 15))
                     runCatching { Scheduler.scheduleDaily(getApplication(), trigger, true) }
-                    app.logRepository.append("INFO", "监测发现每日调度通道全部关闭，已自动重建")
+                    app.logRepository.append("WARN", "监测发现每日调度通道缺失(${health.missing.joinToString(",")})，已自动重建")
                 } else if (dailyState.nextTriggerMillis > 0L && now - dailyState.nextTriggerMillis > 3 * 60 * 1000L) {
                     Scheduler.triggerDailyCatchUp(getApplication(), "monitor-overdue")
                     app.logRepository.append("INFO", "监测发现每日任务超过触发时间未执行，已触发补偿执行")

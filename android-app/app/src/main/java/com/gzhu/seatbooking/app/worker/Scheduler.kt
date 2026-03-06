@@ -62,6 +62,11 @@ object Scheduler {
         val daily: TriggerServiceState
     )
 
+    data class ChannelHealth(
+        val allReady: Boolean,
+        val missing: List<String>
+    )
+
     fun scheduleDaily(context: Context, triggerTime: LocalTime, enabled: Boolean) {
         val workManager = WorkManager.getInstance(context)
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -88,24 +93,38 @@ object Scheduler {
         val precheckAt = (triggerAt - PRECHECK_ADVANCE_MILLIS).coerceAtLeast(System.currentTimeMillis() + 500L)
         val precheckDelay = (precheckAt - System.currentTimeMillis()).coerceAtLeast(0L)
 
-        scheduleDailyAlarm(alarmManager, context, token, triggerAt)
-        scheduleDailyWork(workManager, token, delay, triggerAt)
-        scheduleDailyJob(jobScheduler, context, token, delay, triggerAt)
-        scheduleDailyPrecheckAlarm(alarmManager, context, token, precheckAt, triggerAt)
-        scheduleDailyPrecheckWork(workManager, token, precheckDelay, triggerAt)
-        scheduleDailyPrecheckJob(jobScheduler, context, token, precheckDelay, triggerAt)
+        val alarmReady = scheduleDailyAlarm(alarmManager, context, token, triggerAt)
+        val workReady = scheduleDailyWork(workManager, token, delay, triggerAt)
+        val jobReady = scheduleDailyJob(jobScheduler, context, token, delay, triggerAt)
+        val precheckAlarmReady = scheduleDailyPrecheckAlarm(alarmManager, context, token, precheckAt, triggerAt)
+        val precheckWorkReady = scheduleDailyPrecheckWork(workManager, token, precheckDelay, triggerAt)
+        val precheckJobReady = scheduleDailyPrecheckJob(jobScheduler, context, token, precheckDelay, triggerAt)
+
+        // Retry once for channels that occasionally fail to register on heavily loaded systems.
+        val finalWorkReady = if (workReady) true else scheduleDailyWork(workManager, token, delay, triggerAt)
+        val finalJobReady = if (jobReady) true else scheduleDailyJob(jobScheduler, context, token, delay, triggerAt)
+        val finalPrecheckWorkReady = if (precheckWorkReady) true else scheduleDailyPrecheckWork(workManager, token, precheckDelay, triggerAt)
+        val finalPrecheckJobReady = if (precheckJobReady) true else scheduleDailyPrecheckJob(jobScheduler, context, token, precheckDelay, triggerAt)
 
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_DAILY_ENABLED, true)
             .putLong(KEY_NEXT_TRIGGER, triggerAt)
             .putString(KEY_DAILY_PENDING_TOKEN, token)
-            .putBoolean(KEY_DAILY_ALARM_ACTIVE, true)
+            .putBoolean(KEY_DAILY_ALARM_ACTIVE, alarmReady)
             .apply()
         appendLog(
             context,
             "INFO",
-            "每日任务已更新：next=${formatMillis(triggerAt)} precheck=${formatMillis(precheckAt)} token=$token（Alarm+Work+Job + 前1min预检）"
+            "每日任务已更新：next=${formatMillis(triggerAt)} token=$token daily(alarm=$alarmReady work=$finalWorkReady job=$finalJobReady) precheck(alarm=$precheckAlarmReady work=$finalPrecheckWorkReady job=$finalPrecheckJobReady)"
         )
+
+        if (!alarmReady || !finalWorkReady || !finalJobReady) {
+            appendLog(
+                context,
+                "ERROR",
+                "每日任务更新存在缺失通道：daily(alarm=$alarmReady work=$finalWorkReady job=$finalJobReady)，建议稍后自动监测重建"
+            )
+        }
     }
 
     fun isDailyTaskEnabled(context: Context): Boolean {
@@ -129,6 +148,14 @@ object Scheduler {
         return@withContext SchedulerStatus(
             daily = TriggerServiceState(alarmDailyEnabled, dailyWorkEnabled, dailyJobEnabled, nextDaily)
         )
+    }
+
+    fun evaluateDailyHealth(status: SchedulerStatus): ChannelHealth {
+        val missing = mutableListOf<String>()
+        if (!status.daily.alarmEnabled) missing += "alarm"
+        if (!status.daily.workEnabled) missing += "work"
+        if (!status.daily.jobEnabled) missing += "job"
+        return ChannelHealth(allReady = missing.isEmpty(), missing = missing)
     }
 
     fun tryConsumeExecutionToken(context: Context, action: String, token: String, source: String): Boolean {
@@ -174,7 +201,7 @@ object Scheduler {
         appendLog(context, "INFO", "触发每日任务补偿执行 reason=$reason token=$token")
     }
 
-    private fun scheduleDailyAlarm(alarmManager: AlarmManager, context: Context, token: String, triggerAt: Long) {
+    private fun scheduleDailyAlarm(alarmManager: AlarmManager, context: Context, token: String, triggerAt: Long): Boolean {
         val pi = pendingIntent(
             context,
             ACTION_DAILY,
@@ -184,11 +211,12 @@ object Scheduler {
             triggerSource = "alarm-daily",
             targetOffsetDays = 1L,
             targetTriggerAt = triggerAt
-        ) ?: return
+        ) ?: return false
         scheduleAlarmSafely(alarmManager, triggerAt, pi)
+        return pendingIntent(context, ACTION_DAILY, REQ_DAILY, create = false) != null
     }
 
-    private fun scheduleDailyPrecheckAlarm(alarmManager: AlarmManager, context: Context, token: String, precheckAt: Long, triggerAt: Long) {
+    private fun scheduleDailyPrecheckAlarm(alarmManager: AlarmManager, context: Context, token: String, precheckAt: Long, triggerAt: Long): Boolean {
         val pi = pendingIntent(
             context,
             ACTION_DAILY_PRECHECK,
@@ -198,11 +226,12 @@ object Scheduler {
             triggerSource = "alarm-daily-precheck",
             targetOffsetDays = 1L,
             targetTriggerAt = triggerAt
-        ) ?: return
+        ) ?: return false
         scheduleAlarmSafely(alarmManager, precheckAt, pi)
+        return pendingIntent(context, ACTION_DAILY_PRECHECK, REQ_DAILY_PRECHECK, create = false) != null
     }
 
-    private fun scheduleDailyWork(workManager: WorkManager, token: String, delay: Long, triggerAt: Long) {
+    private fun scheduleDailyWork(workManager: WorkManager, token: String, delay: Long, triggerAt: Long): Boolean {
         val input = Data.Builder()
             .putString(AlarmDispatchWorker.KEY_ACTION, ACTION_DAILY)
             .putString(EXTRA_TEST_TOKEN, token)
@@ -214,10 +243,13 @@ object Scheduler {
             .setInputData(input)
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
             .build()
-        workManager.enqueueUniqueWork(DAILY_WORK_NAME, ExistingWorkPolicy.REPLACE, work)
+        return runCatching {
+            workManager.enqueueUniqueWork(DAILY_WORK_NAME, ExistingWorkPolicy.REPLACE, work)
+            true
+        }.getOrElse { false }
     }
 
-    private fun scheduleDailyPrecheckWork(workManager: WorkManager, token: String, delay: Long, triggerAt: Long) {
+    private fun scheduleDailyPrecheckWork(workManager: WorkManager, token: String, delay: Long, triggerAt: Long): Boolean {
         val input = Data.Builder()
             .putString(AlarmDispatchWorker.KEY_ACTION, ACTION_DAILY_PRECHECK)
             .putString(EXTRA_TEST_TOKEN, token)
@@ -229,10 +261,13 @@ object Scheduler {
             .setInputData(input)
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
             .build()
-        workManager.enqueueUniqueWork(DAILY_PRECHECK_WORK_NAME, ExistingWorkPolicy.REPLACE, work)
+        return runCatching {
+            workManager.enqueueUniqueWork(DAILY_PRECHECK_WORK_NAME, ExistingWorkPolicy.REPLACE, work)
+            true
+        }.getOrElse { false }
     }
 
-    private fun scheduleDailyJob(jobScheduler: JobScheduler, context: Context, token: String, delay: Long, triggerAt: Long) {
+    private fun scheduleDailyJob(jobScheduler: JobScheduler, context: Context, token: String, delay: Long, triggerAt: Long): Boolean {
         val extras = PersistableBundle().apply {
             putString(AlarmDispatchWorker.KEY_ACTION, ACTION_DAILY)
             putString(EXTRA_TEST_TOKEN, token)
@@ -246,11 +281,13 @@ object Scheduler {
             .setPersisted(true)
             .setExtras(extras)
             .build()
-        jobScheduler.cancel(JOB_DAILY_ID)
-        jobScheduler.schedule(info)
+        return runCatching {
+            jobScheduler.cancel(JOB_DAILY_ID)
+            jobScheduler.schedule(info) > 0
+        }.getOrElse { false }
     }
 
-    private fun scheduleDailyPrecheckJob(jobScheduler: JobScheduler, context: Context, token: String, delay: Long, triggerAt: Long) {
+    private fun scheduleDailyPrecheckJob(jobScheduler: JobScheduler, context: Context, token: String, delay: Long, triggerAt: Long): Boolean {
         val extras = PersistableBundle().apply {
             putString(AlarmDispatchWorker.KEY_ACTION, ACTION_DAILY_PRECHECK)
             putString(EXTRA_TEST_TOKEN, token)
@@ -264,8 +301,10 @@ object Scheduler {
             .setPersisted(true)
             .setExtras(extras)
             .build()
-        jobScheduler.cancel(JOB_DAILY_PRECHECK_ID)
-        jobScheduler.schedule(info)
+        return runCatching {
+            jobScheduler.cancel(JOB_DAILY_PRECHECK_ID)
+            jobScheduler.schedule(info) > 0
+        }.getOrElse { false }
     }
 
     private fun cancelDailyChannels(context: Context) {
