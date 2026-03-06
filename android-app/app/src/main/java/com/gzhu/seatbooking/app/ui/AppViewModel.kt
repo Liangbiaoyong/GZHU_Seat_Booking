@@ -29,7 +29,6 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.security.MessageDigest
 import java.time.DayOfWeek
-import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -124,11 +123,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
                 val justEnabled = !current.autoEnabled && effectiveConfig.autoEnabled
                 if (justEnabled) {
-                    if (shouldTriggerCatchUpOnEnable(triggerNow, effectiveConfig)) {
-                        Scheduler.triggerDailyCatchUp(getApplication(), "enable-after-trigger-time")
-                        app.logRepository.append("INFO", "启用自动预约时已过触发时刻，已触发一次补偿执行")
-                    } else {
-                        app.logRepository.append("INFO", "启用自动预约：已过触发时刻但不满足补偿条件，跳过补偿执行")
+                    if (LocalTime.now().isAfter(triggerNow)) {
+                        // Enabling after trigger time should schedule the next day normally.
+                        app.logRepository.append("INFO", "启用自动预约时已过触发时刻：本次按下一日正常调度，不触发补偿执行")
                     }
                 }
             }
@@ -510,30 +507,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             end = end.format(DateTimeFormatter.ofPattern("HH:mm")),
             enabled = false
         )
-    }
-
-    private fun shouldTriggerCatchUpOnEnable(triggerTime: LocalTime, config: AppConfig): Boolean {
-        val now = LocalTime.now()
-        if (!now.isAfter(triggerTime)) return false
-
-        val lateMinutes = Duration.between(triggerTime, now).toMinutes()
-        if (lateMinutes > 10) {
-            app.logRepository.append("INFO", "补偿触发跳过：当前距触发时刻已超过10分钟 late=${lateMinutes}min")
-            return false
-        }
-
-        val tomorrow = LocalDate.now().plusDays(1).dayOfWeek
-        val enabledTomorrowSlots = config.weekSchedule[tomorrow].orEmpty().count { it.enabled }
-        if (enabledTomorrowSlots <= 0) {
-            app.logRepository.append("INFO", "补偿触发跳过：明日未启用任何时段 day=$tomorrow")
-            return false
-        }
-
-        if (config.seatDevId <= 0 || config.seatCode.isBlank()) {
-            app.logRepository.append("INFO", "补偿触发跳过：座位配置不完整")
-            return false
-        }
-        return true
     }
 
     private fun sha256Hex(value: String): String {
