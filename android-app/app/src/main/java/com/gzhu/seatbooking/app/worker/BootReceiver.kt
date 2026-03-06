@@ -11,12 +11,20 @@ import java.time.LocalTime
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent?.action != Intent.ACTION_BOOT_COMPLETED) return
+        val action = intent?.action.orEmpty()
+        val recoverableActions = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_LOCKED_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED
+        )
+        if (action !in recoverableActions) return
         val app = context.applicationContext as GzhuSeatBookingApp
         CoroutineScope(Dispatchers.IO).launch {
             val cfg = app.configStore.getConfig()
-            val time = runCatching { LocalTime.parse(cfg.triggerTime) }.getOrDefault(LocalTime.of(7, 16))
+            val time = runCatching { LocalTime.parse(cfg.triggerTime) }.getOrDefault(LocalTime.of(7, 15))
+            app.logRepository.append("INFO", "系统广播触发调度恢复：action=$action auto=${cfg.autoEnabled} trigger=${cfg.triggerTime}")
             Scheduler.scheduleDaily(context, time, cfg.autoEnabled)
+            app.logRepository.append("INFO", "系统广播调度恢复完成：action=$action")
         }
     }
 }

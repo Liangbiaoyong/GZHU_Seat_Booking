@@ -1,32 +1,36 @@
 ﻿package com.gzhu.seatbooking.app.data.network
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import android.webkit.CookieManager
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import com.gzhu.seatbooking.app.data.model.OccupyBlock
 import com.gzhu.seatbooking.app.data.model.RoomOption
 import com.gzhu.seatbooking.app.data.model.SeatOption
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.FormBody
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import org.mozilla.javascript.Context as RhinoContext
+import org.mozilla.javascript.Function
+import java.net.CookieManager
+import java.net.CookiePolicy
+import java.net.URI
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.ZoneId
-import kotlin.coroutines.resume
 
 data class SessionInfo(
     val token: String,
@@ -41,9 +45,15 @@ class LibraryApi(
     context: Context,
     private val logger: ((String, String) -> Unit)? = null
 ) {
-    private val appContext: Context = context.applicationContext
     private val client = OkHttpClient()
     private val jsonType = "application/json;charset=UTF-8".toMediaType()
+    private val defaultServiceUrl = "http://libbooking.gzhu.edu.cn/authcenter/doAuth/4edbd40b8d1b4ef8970355950765d41f"
+    private val loginRetryWaitMs = listOf(0L, 700L, 1300L)
+
+    init {
+        // Keep constructor signature stable while login implementation no longer needs WebView context.
+        context.applicationContext
+    }
 
     suspend fun refreshSessionByAccountPassword(account: String, password: String): SessionInfo? {
         if (account.isBlank() || password.isBlank()) {
@@ -51,21 +61,25 @@ class LibraryApi(
             return null
         }
 
-        writeLog("INFO", "开始自动登录获取会话")
+        writeLog("INFO", "开始纯HTTP自动登录获取会话")
 
-        val strategies = listOf(true, false, true)
-        for ((idx, aggressiveReturnHome) in strategies.withIndex()) {
-            writeLog("INFO", "自动登录尝试 ${idx + 1}/${strategies.size}")
-            val session = runCatching { loginWithWebView(account, password, aggressiveReturnHome) }.getOrNull()
+        repeat(loginRetryWaitMs.size) { index ->
+            val waitMs = loginRetryWaitMs[index]
+            if (waitMs > 0) {
+                writeLog("INFO", "自动登录第${index + 1}次尝试前等待 ${waitMs}ms")
+                delay(waitMs)
+            }
+            writeLog("INFO", "自动登录尝试 ${index + 1}/${loginRetryWaitMs.size}")
+            val session = runCatching { loginWithHttp(account, password) }.getOrNull()
             if (session == null) {
-                writeLog("ERROR", "第${idx + 1}次自动登录未拿到会话")
-                continue
+                writeLog("ERROR", "第${index + 1}次自动登录未拿到会话")
+                return@repeat
             }
             if (validateSession(session.token, session.cookieHeader)) {
                 writeLog("SUCCESS", "自动登录并校验会话成功")
                 return session
             }
-            writeLog("ERROR", "第${idx + 1}次自动登录后会话校验失败")
+            writeLog("ERROR", "第${index + 1}次自动登录后会话校验失败")
         }
         return null
     }
@@ -109,165 +123,252 @@ class LibraryApi(
         }
     }
 
-    private suspend fun loginWithWebView(account: String, password: String, aggressiveReturnHome: Boolean): SessionInfo? {
-        return suspendCancellableCoroutine { cont ->
-            val handler = Handler(Looper.getMainLooper())
-            val cookieManager = CookieManager.getInstance()
-            var submitted = false
-            var finished = false
-            var pollCount = 0
-            var tokenFromRequest = ""
-            var homeReloaded = false
+    private suspend fun loginWithHttp(account: String, password: String): SessionInfo? = withContext(Dispatchers.IO) {
+        writeLog("INFO", "[login-http] 建立独立cookie会话")
+        val cookieManager = CookieManager().apply { setCookiePolicy(CookiePolicy.ACCEPT_ALL) }
+        val loginClient = OkHttpClient.Builder()
+            .cookieJar(JavaNetCookieJar(cookieManager))
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
 
-            fun finish(result: SessionInfo?) {
-                if (finished) return
-                finished = true
-                if (cont.isActive) cont.resume(result)
-            }
+        val toLoginPage = discoverToLoginPage(loginClient)
+        writeLog("INFO", "[login-http] auth入口: ${maskUrl(toLoginPage)}")
+        val bootstrapResp = executeGet(loginClient, toLoginPage)
+        val loginUrl = resolveLoginUrl(bootstrapResp)
+        writeLog("INFO", "[login-http] CAS登录页: ${maskUrl(loginUrl)}")
+        bootstrapResp.close()
 
-            handler.post {
-                cookieManager.setAcceptCookie(true)
-                cookieManager.removeAllCookies(null)
-                cookieManager.flush()
+        val loginPageResp = executeGet(loginClient, loginUrl)
+        if (!loginPageResp.isSuccessful) {
+            writeLog("ERROR", "登录页加载失败: status=${loginPageResp.code}")
+            loginPageResp.close()
+            return@withContext null
+        }
+        val loginHtml = loginPageResp.body?.string().orEmpty()
+        loginPageResp.close()
 
-                val webView = WebView(appContext)
-                webView.settings.javaScriptEnabled = true
-                webView.settings.domStorageEnabled = true
-                webView.settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-                cookieManager.setAcceptThirdPartyCookies(webView, true)
+        val form = parseHiddenInputs(loginHtml)
+        val lt = form["lt"].orEmpty()
+        val execution = form["execution"].orEmpty()
+        val eventId = form["_eventId"].orEmpty().ifBlank { "submit" }
+        writeLog("INFO", "[login-http] 登录字段: lt=${lt.length} execution=${execution.length} extra=${form.size}")
+        if (lt.isBlank() || execution.isBlank()) {
+            writeLog("ERROR", "登录页缺少 lt/execution 字段")
+            return@withContext null
+        }
 
-                fun extractTokenAndCookie() {
-                    fun buildSession(token: String) {
-                        if (token.isBlank()) return
-                        val cookieHeader = cookieManager.getCookie("https://libbooking.gzhu.edu.cn").orEmpty()
-                        if (cookieHeader.isBlank()) return
-                        writeLog("INFO", "已提取到 token 与 cookie")
-                        runCatching { webView.destroy() }
-                        finish(SessionInfo(token = token, cookieHeader = cookieHeader))
-                    }
+        val desJsResp = executeGet(loginClient, "https://newcas.gzhu.edu.cn/cas/comm/js/des.js")
+        val desJs = desJsResp.body?.string().orEmpty()
+        desJsResp.close()
+        if (desJs.isBlank()) {
+            writeLog("ERROR", "获取 DES 脚本失败")
+            return@withContext null
+        }
 
-                    if (tokenFromRequest.isNotBlank()) {
-                        buildSession(tokenFromRequest)
-                        return
-                    }
+        val rsa = runCatching { computeRsa(desJs, account + password + lt) }.getOrElse {
+            writeLog("ERROR", "计算 rsa 失败: ${it.message.orEmpty()}")
+            return@withContext null
+        }
+        writeLog("INFO", "[login-http] rsa计算完成: len=${rsa.length}")
 
-                    webView.evaluateJavascript(
-                        "(function(){try{return sessionStorage.getItem('token') || localStorage.getItem('token') || '';}catch(e){return '';}})();"
-                    ) { tokenRaw ->
-                        val token = tokenRaw.orEmpty().trim().trim('"')
-                        buildSession(token)
-                    }
-                }
+        val bodyBuilder = FormBody.Builder(StandardCharsets.UTF_8)
+            .add("rsa", rsa)
+            .add("ul", account.length.toString())
+            .add("pl", password.length.toString())
+            .add("lt", lt)
+            .add("execution", execution)
+            .add("_eventId", eventId)
 
-                fun trySubmitLoginForm() {
-                    val js = """
-                        (function() {
-                          const user = document.querySelector('#un')
-                            || document.querySelector('input[name="un"]')
-                            || document.querySelector('#username')
-                            || document.querySelector('input[name="username"]');
-                          const pwd = document.querySelector('#pd')
-                            || document.querySelector('input[name="pd"]')
-                            || document.querySelector('#password')
-                            || document.querySelector('input[name="password"]');
-                          const btn = document.querySelector('#index_login_btn')
-                            || document.querySelector('button[type="submit"]')
-                            || document.querySelector('input[type="submit"]');
-                          if (!user || !pwd || !btn) return 'no_form';
-                          user.focus(); user.value = '${jsEscape(account)}'; user.setAttribute('value','${jsEscape(account)}');
-                          user.dispatchEvent(new Event('input', { bubbles: true }));
-                          user.dispatchEvent(new Event('change', { bubbles: true }));
-                          pwd.focus(); pwd.value = '${jsEscape(password)}'; pwd.setAttribute('value','${jsEscape(password)}');
-                          pwd.dispatchEvent(new Event('input', { bubbles: true }));
-                          pwd.dispatchEvent(new Event('change', { bubbles: true }));
-                          btn.click();
-                          return 'submitted';
-                        })();
-                    """.trimIndent()
-                    webView.evaluateJavascript(js) { ret ->
-                        if (ret?.contains("submitted") == true) {
-                            submitted = true
-                            writeLog("INFO", "已自动填写并提交登录表单")
-                            handler.postDelayed({
-                                if (!finished && !homeReloaded) {
-                                    homeReloaded = true
-                                    writeLog("INFO", "提交后主动回主页触发会话同步")
-                                    webView.loadUrl("https://libbooking.gzhu.edu.cn/#/ic/home")
-                                }
-                            }, 7000)
-                            if (aggressiveReturnHome) {
-                                handler.postDelayed({
-                                    if (!finished) {
-                                        writeLog("INFO", "二次回主页以提升会话同步成功率")
-                                        webView.loadUrl("https://libbooking.gzhu.edu.cn/#/ic/home")
-                                    }
-                                }, 10500)
-                            }
-                        } else if (ret?.contains("no_form") == true) {
-                            writeLog("INFO", "当前页面未找到登录表单，继续等待")
-                        }
-                    }
-                }
-
-                val pollTask = object : Runnable {
-                    override fun run() {
-                        if (finished) return
-                        pollCount += 1
-                        if (!submitted) {
-                            trySubmitLoginForm()
-                        }
-                        extractTokenAndCookie()
-                        if (!finished && pollCount < 45) {
-                            handler.postDelayed(this, 1000)
-                        }
-                    }
-                }
-
-                webView.webViewClient = object : WebViewClient() {
-                    override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): android.webkit.WebResourceResponse? {
-                        val headers = request?.requestHeaders.orEmpty()
-                        val token = headers["token"].orEmpty()
-                        if (token.isNotBlank() && tokenFromRequest.isBlank()) {
-                            tokenFromRequest = token
-                            writeLog("INFO", "已从请求头捕获 token")
-                        }
-                        return super.shouldInterceptRequest(view, request)
-                    }
-
-                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                        val target = request?.url?.toString().orEmpty()
-                        if (target.startsWith("http://libbooking.gzhu.edu.cn")) {
-                            val httpsUrl = target.replaceFirst("http://", "https://")
-                            writeLog("INFO", "检测到HTTP跳转，强制升级HTTPS: $httpsUrl")
-                            view?.loadUrl(httpsUrl)
-                            return true
-                        }
-                        return false
-                    }
-
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        super.onPageFinished(view, url)
-                        writeLog("INFO", "页面加载完成: ${url.orEmpty()}")
-                        if (url.orEmpty().startsWith("chrome-error://")) {
-                            writeLog("ERROR", "WebView进入错误页，通常是登录重定向到HTTP被阻断")
-                        }
-                        handler.post { if (!finished) extractTokenAndCookie() }
-                    }
-                }
-
-                writeLog("INFO", "加载图书馆主页并准备自动登录")
-                webView.loadUrl("https://libbooking.gzhu.edu.cn/#/ic/home")
-                handler.postDelayed(pollTask, 1200)
-
-                handler.postDelayed({
-                    if (!finished) {
-                        writeLog("ERROR", "WebView 自动登录超时")
-                        runCatching { webView.destroy() }
-                        finish(null)
-                    }
-                }, 45000)
+        form.forEach { (name, value) ->
+            if (name !in setOf("rsa", "ul", "pl", "lt", "execution", "_eventId", "un", "pd", "username", "password") && value.isNotBlank()) {
+                bodyBuilder.add(name, value)
             }
         }
+
+        val postRequest = Request.Builder()
+            .url(loginUrl)
+            .post(bodyBuilder.build())
+            .header("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("origin", "https://newcas.gzhu.edu.cn")
+            .header("referer", loginUrl)
+            .header("user-agent", defaultUserAgent())
+            .build()
+
+        val loginResp = loginClient.newCall(postRequest).execute()
+        writeLog("INFO", "[login-http] CAS提交返回: status=${loginResp.code}")
+        val finalResp = followRedirects(loginClient, loginResp, 12)
+        writeLog("INFO", "[login-http] 重定向结束: final=${finalResp.code} ${maskUrl(finalResp.request.url.toString())}")
+        finalResp.close()
+
+        warmupAfterAuth(loginClient)
+
+        val cookieHeader = buildCookieHeader(cookieManager)
+        if (cookieHeader.isBlank()) {
+            writeLog("ERROR", "登录后未获取到 libbooking cookie")
+            return@withContext null
+        }
+        writeLog("INFO", "[login-http] cookie就绪: len=${cookieHeader.length}")
+
+        val userInfoResp = Request.Builder()
+            .url("https://libbooking.gzhu.edu.cn/ic-web/auth/userInfo")
+            .get()
+            .header("accept", "application/json, text/plain, */*")
+            .header("lan", "1")
+            .header("cookie", cookieHeader)
+            .header("user-agent", defaultUserAgent())
+            .build()
+
+        client.newCall(userInfoResp).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                writeLog("ERROR", "userInfo 校验失败: status=${resp.code}")
+                return@withContext null
+            }
+            val root = runCatching { JSONObject(resp.body?.string().orEmpty()) }.getOrNull() ?: return@withContext null
+            if (root.optInt("code", -1) != 0) {
+                writeLog("ERROR", "userInfo 返回非成功: code=${root.optInt("code", -1)}")
+                return@withContext null
+            }
+            val token = root.optJSONObject("data")?.optString("token").orEmpty()
+            if (token.isBlank()) {
+                writeLog("ERROR", "userInfo 成功但未返回 token")
+                return@withContext null
+            }
+            writeLog("INFO", "已通过纯HTTP链路拿到 token+cookie tokenLen=${token.length}")
+            return@withContext SessionInfo(token = token, cookieHeader = cookieHeader)
+        }
+    }
+
+    private fun discoverToLoginPage(loginClient: OkHttpClient): String {
+        executeGet(loginClient, "https://libbooking.gzhu.edu.cn/ic-web/auth/userInfo").use { resp ->
+            writeLog("INFO", "pre-userInfo status=${resp.code}")
+        }
+        executeGet(
+            loginClient,
+            "https://libbooking.gzhu.edu.cn/ic-web/auth/address?finalAddress=https:%2F%2Flibbooking.gzhu.edu.cn&errPageUrl=https:%2F%2Flibbooking.gzhu.edu.cn%2F%23%2Ferror&manager=false&consoleType=16"
+        ).use { resp ->
+            if (!resp.isSuccessful) return "http://libbooking.gzhu.edu.cn/authcenter/toLoginPage"
+            val root = runCatching { JSONObject(resp.body?.string().orEmpty()) }.getOrNull() ?: return "http://libbooking.gzhu.edu.cn/authcenter/toLoginPage"
+            val signed = root.optString("data")
+            if (signed.startsWith("http")) {
+                writeLog("INFO", "[login-http] auth/address返回动态入口")
+                return signed
+            }
+        }
+        writeLog("INFO", "[login-http] auth/address不可用，回退默认入口")
+        return "http://libbooking.gzhu.edu.cn/authcenter/toLoginPage"
+    }
+
+    private fun resolveLoginUrl(bootstrapResp: Response): String {
+        val location = bootstrapResp.header("Location").orEmpty()
+        if (location.isNotBlank()) {
+            return bootstrapResp.request.url.resolve(location)?.toString() ?: location
+        }
+        val encodedService = URLEncoder.encode(defaultServiceUrl, StandardCharsets.UTF_8.toString())
+        return "https://newcas.gzhu.edu.cn/cas/login?service=$encodedService"
+    }
+
+    private fun followRedirects(loginClient: OkHttpClient, start: Response, maxHops: Int): Response {
+        var current = start
+        repeat(maxHops) {
+            val status = current.code
+            val location = current.header("Location").orEmpty()
+            writeLog(
+                "INFO",
+                "[login-http] redirect hop=${it + 1} status=$status from=${maskUrl(current.request.url.toString())} to=${maskUrl(location)}"
+            )
+            if (status !in setOf(301, 302, 303, 307, 308) || location.isBlank()) {
+                return current
+            }
+
+            val nextUrl = current.request.url.resolve(location)
+            if (nextUrl == null) {
+                return current
+            }
+            val nextMethod = if (status in setOf(301, 302, 303)) "GET" else current.request.method
+            val nextRequest = Request.Builder()
+                .url(nextUrl)
+                .method(nextMethod, if (nextMethod == "GET") null else current.request.body)
+                .header("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("user-agent", defaultUserAgent())
+                .build()
+            current.close()
+            current = loginClient.newCall(nextRequest).execute()
+        }
+        return current
+    }
+
+    private fun warmupAfterAuth(loginClient: OkHttpClient) {
+        executeGet(loginClient, "https://libbooking.gzhu.edu.cn/").use { resp ->
+            writeLog("INFO", "[login-http] warmup home status=${resp.code}")
+        }
+        executeGet(loginClient, "https://libbooking.gzhu.edu.cn/ic-web/Language/getLanList").use { resp ->
+            writeLog("INFO", "[login-http] warmup lan status=${resp.code}")
+        }
+    }
+
+    private fun buildCookieHeader(cookieManager: CookieManager): String {
+        val uri = URI("https://libbooking.gzhu.edu.cn/")
+        return cookieManager.cookieStore.get(uri)
+            .asSequence()
+            .filter { it.name.isNotBlank() && it.value.isNotBlank() }
+            .map { "${it.name}=${it.value}" }
+            .distinct()
+            .joinToString("; ")
+    }
+
+    private fun parseHiddenInputs(html: String): Map<String, String> {
+        val inputRegex = Regex("<input[^>]*>", RegexOption.IGNORE_CASE)
+        val nameRegex = Regex("name\\s*=\\s*['\"]?([^'\"\\s>]+)", RegexOption.IGNORE_CASE)
+        val valueRegex = Regex("value\\s*=\\s*['\"]([^'\"]*)['\"]", RegexOption.IGNORE_CASE)
+        val result = mutableMapOf<String, String>()
+        inputRegex.findAll(html).forEach { match ->
+            val snippet = match.value
+            val name = nameRegex.find(snippet)?.groupValues?.getOrNull(1).orEmpty().trim()
+            if (name.isBlank()) return@forEach
+            val value = valueRegex.find(snippet)?.groupValues?.getOrNull(1).orEmpty()
+            result[name] = value
+        }
+        return result
+    }
+
+    private fun computeRsa(desJs: String, plainText: String): String {
+        val ctx = RhinoContext.enter()
+        return try {
+            ctx.optimizationLevel = -1
+            val scope = ctx.initStandardObjects()
+            ctx.evaluateString(scope, desJs, "des.js", 1, null)
+            val fn = scope.get("strEnc", scope)
+            if (fn !is Function) error("des.js 未暴露 strEnc")
+            fn.call(ctx, scope, scope, arrayOf(plainText, "1", "2", "3")).toString().uppercase()
+        } finally {
+            RhinoContext.exit()
+        }
+    }
+
+    private fun executeGet(loginClient: OkHttpClient, url: String): Response {
+        val parsed = url.toHttpUrlOrNull() ?: throw IllegalArgumentException("非法URL: $url")
+        val request = Request.Builder()
+            .url(parsed)
+            .get()
+            .header("accept", "application/json, text/plain, */*, text/html")
+            .header("lan", "1")
+            .header("user-agent", defaultUserAgent())
+            .build()
+        return loginClient.newCall(request).execute()
+    }
+
+    private fun defaultUserAgent(): String {
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+
+    private fun maskUrl(url: String): String {
+        if (url.isBlank()) return ""
+        return url
+            .replace(Regex("(ticket=)[^&]+", RegexOption.IGNORE_CASE), "$1***")
+            .replace(Regex("(uniToken=)[^&]+", RegexOption.IGNORE_CASE), "$1***")
+            .replace(Regex("(token=)[^&]+", RegexOption.IGNORE_CASE), "$1***")
     }
 
     private fun writeLog(level: String, message: String) {
@@ -276,14 +377,6 @@ class LibraryApi(
             "ERROR" -> Log.e("LibraryApi", message)
             else -> Log.i("LibraryApi", message)
         }
-    }
-
-    private fun jsEscape(value: String): String {
-        return value
-            .replace("\\", "\\\\")
-            .replace("'", "\\'")
-            .replace("\n", "\\n")
-            .replace("\r", "")
     }
 
     suspend fun reserve(

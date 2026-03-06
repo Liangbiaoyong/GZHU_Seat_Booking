@@ -1,6 +1,13 @@
 ﻿package com.gzhu.seatbooking.app.ui
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Application
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gzhu.seatbooking.app.GzhuSeatBookingApp
@@ -19,7 +26,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
+import java.security.MessageDigest
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -55,6 +65,11 @@ data class UiState(
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
+    companion object {
+        private const val LOG_EXPORT_CHANNEL_ID = "log_export_channel"
+        private const val LOG_EXPORT_CHANNEL_NAME = "日志导出通知"
+    }
+
     private val app = application as GzhuSeatBookingApp
     private var scheduleSyncJob: Job? = null
     private var scheduleMutationVersion: Long = 0L
@@ -81,13 +96,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateBasicConfig(config: AppConfig) {
         viewModelScope.launch {
+            val current = app.configStore.getConfig()
+            val merged = config.copy(activated = config.activated || current.activated)
+            val effectiveConfig = if (!merged.activated && merged.autoEnabled) {
+                merged.copy(autoEnabled = false)
+            } else {
+                merged
+            }
+            if (effectiveConfig == current) {
+                _uiState.value = _uiState.value.copy(
+                    config = effectiveConfig,
+                    weekServiceStates = buildWeekServiceStates(effectiveConfig)
+                )
+                return@launch
+            }
             app.logRepository.append("INFO", "自动保存基础配置")
-            app.configStore.save(config)
-            requestDebouncedScheduleSync(config)
+            app.configStore.save(effectiveConfig)
+            val triggerNow = runCatching { LocalTime.parse(effectiveConfig.triggerTime) }.getOrNull()
+            if (triggerNow != null && (current.autoEnabled != effectiveConfig.autoEnabled || current.triggerTime != effectiveConfig.triggerTime)) {
+                runCatching { Scheduler.scheduleDaily(getApplication(), triggerNow, effectiveConfig.autoEnabled) }
+                    .onSuccess {
+                        app.logRepository.append("INFO", "定时服务即时更新完成（开关/时间变更）")
+                    }
+                    .onFailure {
+                        app.logRepository.append("ERROR", "定时服务即时更新失败：${it.message.orEmpty()}")
+                    }
+
+                val justEnabled = !current.autoEnabled && effectiveConfig.autoEnabled
+                if (justEnabled) {
+                    if (shouldTriggerCatchUpOnEnable(triggerNow, effectiveConfig)) {
+                        Scheduler.triggerDailyCatchUp(getApplication(), "enable-after-trigger-time")
+                        app.logRepository.append("INFO", "启用自动预约时已过触发时刻，已触发一次补偿执行")
+                    } else {
+                        app.logRepository.append("INFO", "启用自动预约：已过触发时刻但不满足补偿条件，跳过补偿执行")
+                    }
+                }
+            }
+            requestDebouncedScheduleSync(effectiveConfig)
             _uiState.value = _uiState.value.copy(
-                config = config,
-                weekServiceStates = buildWeekServiceStates(config),
-                toast = "配置已自动保存"
+                config = effectiveConfig,
+                weekServiceStates = buildWeekServiceStates(effectiveConfig),
+                toast = if (!config.activated && config.autoEnabled) "请先激活后再开启启动每日预约任务" else "配置已自动保存"
             )
             refreshLogs()
             refreshServiceMonitor()
@@ -147,9 +196,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loginAndFetchSession() {
         viewModelScope.launch {
-            val cfg = _uiState.value.config
-            if (cfg.token.isBlank() || cfg.cookieHeader.isBlank()) {
+            val sessionValid = app.reservationEngine.isSessionValid()
+            if (sessionValid) {
+                _uiState.value = _uiState.value.copy(toast = "已经登录成功")
+                app.logRepository.append("INFO", "登录按钮触发：当前会话有效，无需重新获取")
+            } else {
                 _uiState.value = _uiState.value.copy(toast = "正在登录获取会话，首次获取通常需要较长时间，请耐心等待")
+                app.logRepository.append("INFO", "登录按钮触发：会话无效，准备重新获取")
             }
             app.logRepository.append("INFO", "登录后开始刷新当前选择并依次查询占用")
             refreshRoomAndSeatOptionsInternal()
@@ -157,11 +210,54 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun clearSessionForReloginTest() {
+        viewModelScope.launch {
+            val current = app.configStore.getConfig()
+            val cleared = current.copy(token = "", cookieHeader = "")
+            app.configStore.save(cleared)
+            _uiState.value = _uiState.value.copy(config = cleared, toast = "已退出登录并清除会话")
+            app.logRepository.append("INFO", "用户触发退出登录：已清除token/cookie，用于自动重登录测试")
+            refreshLogs()
+        }
+    }
+
+    fun verifyActivationCode(inputCode: String) {
+        viewModelScope.launch {
+            val normalizedInput = inputCode.trim().lowercase()
+            if (normalizedInput.isBlank()) {
+                _uiState.value = _uiState.value.copy(toast = "请输入加密序列")
+                return@launch
+            }
+            val todayText = LocalDate.now().format(DateTimeFormatter.ofPattern("yyMMdd")) + "?"
+            val expected = sha256Hex(todayText)
+            if (normalizedInput == expected) {
+                val updated = _uiState.value.config.copy(activated = true)
+                app.configStore.save(updated)
+                _uiState.value = _uiState.value.copy(config = updated, toast = "激活成功")
+                app.logRepository.append("SUCCESS", "激活校验成功")
+            } else {
+                _uiState.value = _uiState.value.copy(toast = "加密序列无效")
+                app.logRepository.append("ERROR", "激活校验失败：输入序列不匹配")
+            }
+            refreshLogs()
+        }
+    }
+
+    fun notifyAlreadyActivated() {
+        _uiState.value = _uiState.value.copy(toast = "已经激活，可以正常使用了")
+    }
+
+    fun notifyActivationRequiredForAuto() {
+        _uiState.value = _uiState.value.copy(toast = "请先激活后再开启启动每日预约任务")
+    }
+
     private suspend fun refreshRoomAndSeatOptionsInternal() {
             _uiState.value = _uiState.value.copy(loadingOptions = true)
             try {
                 val rooms = app.reservationEngine.queryRoomOptions()
-                val currentConfig = _uiState.value.config
+                // Always read the latest persisted config to avoid overwriting activation/auto flags
+                // with the default UiState during app cold start.
+                val currentConfig = app.configStore.getConfig()
                 val selectedRoom = rooms.firstOrNull { it.roomId == currentConfig.roomId } ?: rooms.firstOrNull()
                 val roomId = selectedRoom?.roomId ?: currentConfig.roomId
                 val seats = app.reservationEngine.querySeatOptions(roomId)
@@ -227,6 +323,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val logs = app.logRepository.todayLogs().map { "${it.timestamp} [${it.level}] ${it.message}" }
             _uiState.value = _uiState.value.copy(todayLogs = logs)
+        }
+    }
+
+    fun exportLogsZip() {
+        viewModelScope.launch {
+            val zipFile = app.logRepository.exportLogsZip()
+            if (zipFile == null) {
+                _uiState.value = _uiState.value.copy(toast = "当前没有可导出的日志")
+                return@launch
+            }
+            val path = zipFile.absolutePath
+            _uiState.value = _uiState.value.copy(toast = "日志已导出：$path")
+            notifyLogExportPath(path, zipFile)
+            app.logRepository.append("SUCCESS", "日志导出完成：$path")
+            refreshLogs()
+        }
+    }
+
+    fun clearLogs() {
+        viewModelScope.launch {
+            app.logRepository.clearAllLogs()
+            _uiState.value = _uiState.value.copy(todayLogs = emptyList(), toast = "运行日志已清除")
         }
     }
 
@@ -335,7 +453,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val now = System.currentTimeMillis()
                 val hasAnyChannel = dailyState.alarmEnabled || dailyState.workEnabled || dailyState.jobEnabled
                 if (!hasAnyChannel) {
-                    val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 16))
+                    val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 15))
                     runCatching { Scheduler.scheduleDaily(getApplication(), trigger, true) }
                     app.logRepository.append("INFO", "监测发现每日调度通道全部关闭，已自动重建")
                 } else if (dailyState.nextTriggerMillis > 0L && now - dailyState.nextTriggerMillis > 3 * 60 * 1000L) {
@@ -351,7 +469,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val currentVersion = scheduleMutationVersion
         scheduleSyncJob?.cancel()
         scheduleSyncJob = viewModelScope.launch {
-            delay(10_000)
+            delay(2_000)
             if (currentVersion != scheduleMutationVersion) return@launch
             val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrNull()
             if (trigger == null) {
@@ -365,7 +483,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (scheduleError != null) {
                 app.logRepository.append("ERROR", "定时服务防抖更新失败：${scheduleError.message.orEmpty()}")
             } else {
-                app.logRepository.append("INFO", "定时服务防抖更新完成（10s窗口）")
+                app.logRepository.append("INFO", "定时服务防抖更新完成（2s窗口）")
             }
             refreshServiceMonitor()
         }
@@ -392,6 +510,74 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             end = end.format(DateTimeFormatter.ofPattern("HH:mm")),
             enabled = false
         )
+    }
+
+    private fun shouldTriggerCatchUpOnEnable(triggerTime: LocalTime, config: AppConfig): Boolean {
+        val now = LocalTime.now()
+        if (!now.isAfter(triggerTime)) return false
+
+        val lateMinutes = Duration.between(triggerTime, now).toMinutes()
+        if (lateMinutes > 10) {
+            app.logRepository.append("INFO", "补偿触发跳过：当前距触发时刻已超过10分钟 late=${lateMinutes}min")
+            return false
+        }
+
+        val tomorrow = LocalDate.now().plusDays(1).dayOfWeek
+        val enabledTomorrowSlots = config.weekSchedule[tomorrow].orEmpty().count { it.enabled }
+        if (enabledTomorrowSlots <= 0) {
+            app.logRepository.append("INFO", "补偿触发跳过：明日未启用任何时段 day=$tomorrow")
+            return false
+        }
+
+        if (config.seatDevId <= 0 || config.seatCode.isBlank()) {
+            app.logRepository.append("INFO", "补偿触发跳过：座位配置不完整")
+            return false
+        }
+        return true
+    }
+
+    private fun sha256Hex(value: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun notifyLogExportPath(path: String, zipFile: File) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                getApplication(),
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                app.logRepository.append("WARN", "导出日志通知跳过：缺少通知权限")
+                return
+            }
+        }
+
+        val manager = getApplication<Application>().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        ensureExportChannel(manager)
+        val message = "导出地址：$path"
+        val notification = NotificationCompat.Builder(getApplication(), LOG_EXPORT_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_save)
+            .setContentTitle("日志导出成功")
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+
+        val notifyId = (zipFile.lastModified() % Int.MAX_VALUE).toInt().coerceAtLeast(1)
+        manager.notify(notifyId, notification)
+    }
+
+    private fun ensureExportChannel(manager: NotificationManager) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                LOG_EXPORT_CHANNEL_ID,
+                LOG_EXPORT_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+            manager.createNotificationChannel(channel)
+        }
     }
 }
 

@@ -24,8 +24,8 @@ android {
         applicationId = "com.gzhu.seatbooking.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.0.8"
+        versionCode = 22
+        versionName = "1.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -34,17 +34,14 @@ android {
     signingConfigs {
         create("release") {
             val storePath = getSigningValue("RELEASE_STORE_FILE") ?: "../keystore/gzhu-release.jks"
-            val storePass = getSigningValue("RELEASE_STORE_PASSWORD")
-            val keyAliasValue = getSigningValue("RELEASE_KEY_ALIAS")
-            val keyPass = getSigningValue("RELEASE_KEY_PASSWORD")
+            val storePass = getSigningValue("RELEASE_STORE_PASSWORD") ?: "GzhuRelease!2026"
+            val keyAliasValue = getSigningValue("RELEASE_KEY_ALIAS") ?: "gzhu_release"
+            val keyPass = getSigningValue("RELEASE_KEY_PASSWORD") ?: "GzhuRelease!2026"
 
             storeFile = file(storePath)
-
-            if (storePass != null && keyAliasValue != null && keyPass != null) {
-                storePassword = storePass
-                keyAlias = keyAliasValue
-                keyPassword = keyPass
-            }
+            storePassword = storePass
+            keyAlias = keyAliasValue
+            keyPassword = keyPass
         }
     }
 
@@ -89,6 +86,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
+    implementation("org.mozilla:rhino:1.7.15")
     implementation("org.json:json:20240303")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

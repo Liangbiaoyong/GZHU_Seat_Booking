@@ -36,6 +36,7 @@ class ConfigStore(private val context: Context) {
         val root = JSONObject()
         root.put("account", config.account)
         root.put("password", config.password)
+        root.put("activated", config.activated)
         root.put("autoEnabled", config.autoEnabled)
         root.put("triggerTime", config.triggerTime)
         root.put("roomId", config.roomId)
@@ -98,8 +99,9 @@ class ConfigStore(private val context: Context) {
         return AppConfig(
             account = root.optString("account", ""),
             password = root.optString("password", ""),
+            activated = root.optBoolean("activated", false),
             autoEnabled = root.optBoolean("autoEnabled", false),
-            triggerTime = root.optString("triggerTime", "07:16"),
+            triggerTime = root.optString("triggerTime", "07:15"),
             roomId = root.optInt("roomId", 0),
             roomName = root.optString("roomName", ""),
             seatCode = root.optString("seatCode", ""),

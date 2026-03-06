@@ -52,3 +52,6 @@ android-app/gradle-*/
 android-app/app_*.json
 android-app/hs_err_pid*.log
 android-app/replay_pid*.log
+
+# ===== Auth research transient outputs =====
+CODE/research/auth/output/

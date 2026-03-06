@@ -16,7 +16,7 @@
   - `ConfigStore`：DataStore 持久化应用配置
   - `LogRepository`：本地日志（按时间保留）
   - `ReservationResultRepository`：预约结果记录
-  - `LibraryApi`：HTTP 请求与 WebView 会话刷新
+  - `LibraryApi`：HTTP 请求与纯 HTTP/HTTPS 会话刷新
 - `worker`
   - `Scheduler`：统一调度编排（Alarm + Work + Job + precheck）
   - `ReserveAlarmReceiver` / `ReserveJobService` / `AlarmDispatchWorker`：多通道触发入口
@@ -45,11 +45,16 @@
 
 ### 3.1 预检机制
 
-在目标触发前 `30s` 调度 `ACTION_DAILY_PRECHECK`：
+在目标触发前 `1min` 调度 `ACTION_DAILY_PRECHECK`：
 
 - 执行会话 warmup
-- 若刷新成功且当前已晚于原触发时间，则立即补偿执行
+- 若刷新成功且当前已晚于原触发时间，则按补偿规则判断是否执行
 - 否则等待正式触发时刻
+
+启用开关后的补偿执行增加保护条件：
+
+- 仅在“已过触发时刻且不超过 10 分钟”时允许补偿
+- 仅在“明日有启用时段且座位配置完整”时允许补偿
 
 ### 3.2 去重机制
 
@@ -74,7 +79,7 @@
 `AppConfig` 主要字段：
 
 - 认证：`account`, `password`, `token`, `cookieHeader`
-- 调度：`autoEnabled`, `triggerTime`（默认 `07:16`）
+- 调度：`autoEnabled`, `triggerTime`（默认 `07:15`）
 - 座位：`roomId`, `roomName`, `seatCode`, `seatDevId`
 - 计划：`weekSchedule`（按周几配置多个时段）
 

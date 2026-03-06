@@ -5,7 +5,11 @@
 ## 仓库结构
 
 - `android-app/`：Android 客户端主工程（Kotlin + Compose）
-- `CODE/`：辅助脚本（抓包/流程验证）
+- `CODE/`：辅助脚本与研究资产（抓包/流程验证/脱敏分析）
+
+重点子目录：
+
+- `CODE/research/auth/`：认证链路研究脚本、技术文档、脱敏 HAR
 
 ## 快速开始
 

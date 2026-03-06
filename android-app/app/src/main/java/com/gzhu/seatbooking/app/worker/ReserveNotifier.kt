@@ -19,7 +19,6 @@ object ReserveNotifier {
     fun notifyReservationResult(context: Context, triggerSource: String, titlePrefix: String, results: List<ReservationResult>) {
         val success = results.filter { it.success }
         val fail = results.size - success.size
-        if (results.isEmpty()) return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
@@ -35,15 +34,23 @@ object ReserveNotifier {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         ensureChannel(manager)
 
-        val detail = results.take(4).joinToString("；") {
-            val date = it.date.ifBlank { "-" }
-            val seat = it.seatCode.ifBlank { "-" }
-            val range = "${it.start}-${it.end}".trim('-')
-            val state = if (it.success) "成功" else "失败"
-            "$date $seat $range $state"
+        val detail = if (results.isEmpty()) {
+            "本次无可执行预约任务（通常是明日未启用任何时段）"
+        } else {
+            results.take(4).joinToString("；") {
+                val date = it.date.ifBlank { "-" }
+                val seat = it.seatCode.ifBlank { "-" }
+                val range = "${it.start}-${it.end}".trim('-')
+                val state = if (it.success) "成功" else "失败"
+                "$date $seat $range $state"
+            }
         }
         val runTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
-        val title = "$runTime $titlePrefix 成功${success.size}失败$fail"
+        val title = if (results.isEmpty()) {
+            "$runTime $titlePrefix 无任务"
+        } else {
+            "$runTime $titlePrefix 成功${success.size}失败$fail"
+        }
         val sourceText = readableSource(triggerSource)
         val content = "执行明细：$detail；唤醒来源：$sourceText"
 
@@ -57,7 +64,11 @@ object ReserveNotifier {
             .build()
 
         manager.notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
-        appendLog(context, "INFO", "通知已发送：source=$triggerSource title=$titlePrefix success=${success.size} fail=$fail")
+        appendLog(
+            context,
+            "INFO",
+            "通知已发送：source=$triggerSource title=$titlePrefix total=${results.size} success=${success.size} fail=$fail"
+        )
     }
 
     private fun ensureChannel(manager: NotificationManager) {

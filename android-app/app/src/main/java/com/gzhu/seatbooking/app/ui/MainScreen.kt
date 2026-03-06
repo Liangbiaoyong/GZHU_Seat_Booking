@@ -115,6 +115,7 @@ fun MainScreen(vm: AppViewModel) {
                 when (page) {
                     0 -> ConfigTab(
                         config = state.config,
+                        activated = state.config.activated,
                         todayBlocks = state.todayBlocks,
                         tomorrowBlocks = state.tomorrowBlocks,
                         roomOptions = state.roomOptions,
@@ -122,13 +123,17 @@ fun MainScreen(vm: AppViewModel) {
                         loadingOptions = state.loadingOptions,
                         onBasicConfigChange = vm::updateBasicConfig,
                         onLoginFetchSession = vm::loginAndFetchSession,
+                        onLogoutClearSession = vm::clearSessionForReloginTest,
                         onSelectRoom = vm::selectRoom,
                         onSelectSeat = vm::selectSeat,
                         onManualRun = vm::runManual,
                         onManualRunToday = vm::runManualToday,
                         onUpdateWeekSlot = vm::updateWeekSlot,
                         onAddWeekSlot = vm::addWeekSlot,
-                        onRemoveWeekSlot = vm::removeWeekSlot
+                        onRemoveWeekSlot = vm::removeWeekSlot,
+                        onActivationSubmit = vm::verifyActivationCode,
+                        onActivatedClick = vm::notifyAlreadyActivated,
+                        onActivationRequiredForAuto = vm::notifyActivationRequiredForAuto
                     )
 
                     1 -> MonitorTab(
@@ -140,7 +145,11 @@ fun MainScreen(vm: AppViewModel) {
                         dailyServiceState = state.dailyServiceState
                     )
 
-                    else -> LogsTab(state.todayLogs)
+                    else -> LogsTab(
+                        logs = state.todayLogs,
+                        onExportLogs = vm::exportLogsZip,
+                        onClearLogs = vm::clearLogs
+                    )
                 }
             }
         }
@@ -155,6 +164,7 @@ private fun formatResultLine(result: ReservationResult): String {
 @Composable
 private fun ConfigTab(
     config: AppConfig,
+    activated: Boolean,
     todayBlocks: List<OccupyBlock>,
     tomorrowBlocks: List<OccupyBlock>,
     roomOptions: List<RoomOption>,
@@ -162,21 +172,26 @@ private fun ConfigTab(
     loadingOptions: Boolean,
     onBasicConfigChange: (AppConfig) -> Unit,
     onLoginFetchSession: () -> Unit,
+    onLogoutClearSession: () -> Unit,
     onSelectRoom: (Int) -> Unit,
     onSelectSeat: (Int) -> Unit,
     onManualRun: () -> Unit,
     onManualRunToday: () -> Unit,
     onUpdateWeekSlot: (DayOfWeek, String, String, String, Boolean) -> Unit,
     onAddWeekSlot: (DayOfWeek) -> Unit,
-    onRemoveWeekSlot: (DayOfWeek, String) -> Unit
+    onRemoveWeekSlot: (DayOfWeek, String) -> Unit,
+    onActivationSubmit: (String) -> Unit,
+    onActivatedClick: () -> Unit,
+    onActivationRequiredForAuto: () -> Unit
 ) {
     var account by remember(config.account) { mutableStateOf(config.account) }
     var password by remember(config.password) { mutableStateOf(config.password) }
     var triggerTime by remember(config.triggerTime) { mutableStateOf(config.triggerTime) }
-    var autoEnabled by remember(config.autoEnabled) { mutableStateOf(config.autoEnabled) }
     var roomExpanded by remember { mutableStateOf(false) }
     var seatExpanded by remember { mutableStateOf(false) }
     var showStabilityNotice by remember { mutableStateOf(false) }
+    var showActivationDialog by remember { mutableStateOf(false) }
+    var activationCodeInput by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val todayDayUpper = LocalDate.now().dayOfWeek.name
@@ -184,22 +199,44 @@ private fun ConfigTab(
     val selectedSeat = seatOptions.firstOrNull { it.devId == config.seatDevId }
     val triggerTimeError = validateTimeInput(triggerTime)
 
+    LaunchedEffect(activated) {
+        if (activated) {
+            showActivationDialog = false
+            activationCodeInput = ""
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("GZHU Seat Booking", style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("GZHU Seat Booking", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.weight(1f))
+            Button(onClick = {
+                if (activated) {
+                    onActivatedClick()
+                } else {
+                    showActivationDialog = true
+                }
+            }) {
+                Text(if (activated) "已激活" else "需激活")
+            }
+        }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("启动每日预约任务")
             Spacer(modifier = Modifier.width(8.dp))
-            Switch(checked = autoEnabled, onCheckedChange = {
-                autoEnabled = it
+            Switch(checked = config.autoEnabled, onCheckedChange = {
+                if (!activated && it) {
+                    onActivationRequiredForAuto()
+                    return@Switch
+                }
                 onBasicConfigChange(
                     config.copy(
                         account = account,
                         password = password,
-                        autoEnabled = autoEnabled,
+                        autoEnabled = it,
                         triggerTime = triggerTime
                     )
                 )
@@ -208,6 +245,39 @@ private fun ConfigTab(
             TextButton(onClick = { showStabilityNotice = true }) {
                 Text("稳定运行公告")
             }
+        }
+
+        if (showActivationDialog) {
+            AlertDialog(
+                onDismissRequest = { showActivationDialog = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        onActivationSubmit(activationCodeInput)
+                    }) {
+                        Text("检验激活")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        activationCodeInput = ""
+                        showActivationDialog = false
+                    }) {
+                        Text("关闭")
+                    }
+                },
+                title = { Text("激活应用") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("需找开发者提供加密序列。")
+                        OutlinedTextField(
+                            value = activationCodeInput,
+                            onValueChange = { activationCodeInput = it },
+                            label = { Text("输入加密序列") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            )
         }
 
         if (showStabilityNotice) {
@@ -231,7 +301,7 @@ private fun ConfigTab(
 
         OutlinedTextField(value = triggerTime, onValueChange = {
             triggerTime = sanitizeTimeInput(it)
-            onBasicConfigChange(config.copy(account = account, password = password, autoEnabled = autoEnabled, triggerTime = triggerTime))
+            onBasicConfigChange(config.copy(account = account, password = password, autoEnabled = config.autoEnabled, triggerTime = triggerTime))
         }, label = { Text("启动时间(HH:mm)") }, modifier = Modifier.fillMaxWidth(), isError = triggerTimeError != null,
             supportingText = {
                 triggerTimeError?.let { Text(it) }
@@ -239,11 +309,11 @@ private fun ConfigTab(
         )
         OutlinedTextField(value = account, onValueChange = {
             account = it
-            onBasicConfigChange(config.copy(account = account, password = password, autoEnabled = autoEnabled, triggerTime = triggerTime))
+            onBasicConfigChange(config.copy(account = account, password = password, autoEnabled = config.autoEnabled, triggerTime = triggerTime))
         }, label = { Text("广大统一身份认证账户") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(value = password, onValueChange = {
             password = it
-            onBasicConfigChange(config.copy(account = account, password = password, autoEnabled = autoEnabled, triggerTime = triggerTime))
+            onBasicConfigChange(config.copy(account = account, password = password, autoEnabled = config.autoEnabled, triggerTime = triggerTime))
         }, label = { Text("广大统一身份认证密码") }, modifier = Modifier.fillMaxWidth())
 
         Button(onClick = {
@@ -252,6 +322,17 @@ private fun ConfigTab(
             onLoginFetchSession()
         }, modifier = Modifier.fillMaxWidth()) {
             Text(if (loadingOptions) "登录中（获取会话）..." else "登录（获取会话）")
+        }
+
+        Button(
+            onClick = {
+                keyboardController?.hide()
+                focusManager.clearFocus(force = true)
+                onLogoutClearSession()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("退出登录（清除会话）")
         }
 
         val sessionReady = config.token.isNotBlank() && config.cookieHeader.isNotBlank()
@@ -503,8 +584,8 @@ private fun validateTimeInput(value: String): String? {
     if (value.isBlank()) return null
     if (value.contains('：')) return "请使用英文冒号 :，不要使用中文："
     if (value.any { !it.isDigit() && it != ':' }) return "仅支持数字和英文冒号 :"
-    if (value.count { it == ':' } > 1) return "时间格式错误，正确示例：07:16"
-    if (!value.contains(':')) return "时间格式错误，正确示例：07:16"
+    if (value.count { it == ':' } > 1) return "时间格式错误，正确示例：07:15"
+    if (!value.contains(':')) return "时间格式错误，正确示例：07:15"
     if (value.length != 5) return "请补全为 HH:mm 格式"
     val matcher = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
     if (!matcher.matches(value)) return "时间无效，请输入 00:00-23:59"
@@ -657,7 +738,11 @@ private fun DynamicPanel(title: String, items: List<String>, color: Color) {
 }
 
 @Composable
-private fun LogsTab(logs: List<String>) {
+private fun LogsTab(
+    logs: List<String>,
+    onExportLogs: () -> Unit,
+    onClearLogs: () -> Unit
+) {
     val listState = rememberLazyListState()
 
     LaunchedEffect(logs.size) {
@@ -667,7 +752,21 @@ private fun LogsTab(logs: List<String>) {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("运行日志")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("运行日志")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onExportLogs) {
+                    Text("导出日志")
+                }
+                Button(onClick = onClearLogs) {
+                    Text("清除日志")
+                }
+            }
+        }
         Spacer(Modifier.height(8.dp))
         Card(modifier = Modifier.fillMaxSize()) {
             if (logs.isEmpty()) {

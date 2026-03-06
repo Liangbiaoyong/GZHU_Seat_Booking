@@ -16,8 +16,9 @@ data class TimeRangeConfig(
 data class AppConfig(
     val account: String = "",
     val password: String = "",
+    val activated: Boolean = false,
     val autoEnabled: Boolean = false,
-    val triggerTime: String = "07:16",
+    val triggerTime: String = "07:15",
     val roomId: Int = 0,
     val roomName: String = "",
     val seatCode: String = "",

@@ -49,7 +49,7 @@ object Scheduler {
     private const val DAILY_PRECHECK_WORK_NAME = "daily_precheck_work"
     private const val JOB_DAILY_ID = 30001
     private const val JOB_DAILY_PRECHECK_ID = 30003
-    private const val PRECHECK_ADVANCE_MILLIS = 30_000L
+    private const val PRECHECK_ADVANCE_MILLIS = 60_000L
 
     data class TriggerServiceState(
         val alarmEnabled: Boolean,
@@ -104,7 +104,7 @@ object Scheduler {
         appendLog(
             context,
             "INFO",
-            "每日任务已更新：next=${formatMillis(triggerAt)} precheck=${formatMillis(precheckAt)} token=$token（Alarm+Work+Job + 前30s预检）"
+            "每日任务已更新：next=${formatMillis(triggerAt)} precheck=${formatMillis(precheckAt)} token=$token（Alarm+Work+Job + 前1min预检）"
         )
     }
 

@@ -2,7 +2,11 @@
 
 import android.content.Context
 import com.gzhu.seatbooking.app.GzhuSeatBookingApp
+import com.gzhu.seatbooking.app.data.model.AppConfig
 import com.gzhu.seatbooking.app.data.model.ReservationResult
+import kotlinx.coroutines.delay
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 
 object ReserveTaskRunner {
@@ -60,18 +64,100 @@ object ReserveTaskRunner {
     ): RunOutcome? {
         val app = context.applicationContext as GzhuSeatBookingApp
         val config = app.configStore.getConfig()
-        val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 16))
+        val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 15))
         if (!Scheduler.tryConsumeExecutionToken(context, action, token, triggerSource)) {
-            Scheduler.scheduleDaily(context, trigger, config.autoEnabled)
             app.logRepository.append(
                 "INFO",
-                "统一执行器去重命中：已消费 token=$token source=$triggerSource，已重建下一轮Alarm+Work+Job调度"
+                "统一执行器去重命中：已消费 token=$token source=$triggerSource，跳过本通道重建以避免中断正在执行的任务"
             )
             return null
         }
-        val results = app.reservationEngine.runForTomorrowBatch(captcha)
-        Scheduler.scheduleDaily(context, trigger, config.autoEnabled)
+        app.logRepository.append("INFO", "统一执行器开始执行每日预约：source=$triggerSource token=$token")
+        val results = mutableListOf<ReservationResult>()
+        try {
+            results += app.reservationEngine.runForTomorrowBatch(captcha)
+
+            if (shouldRunBurstProbe(results)) {
+                app.logRepository.append("INFO", "命中抢占条件（无可执行/暂不可预定），启动5秒高频抢占")
+                val deadline = System.currentTimeMillis() + 5_000L
+                var rounds = 0
+                var lastProbeFailure: ReservationResult? = null
+                var probeHitSuccess = false
+
+                while (System.currentTimeMillis() < deadline) {
+                    rounds += 1
+                    val probe = app.reservationEngine.runForTomorrowFastProbe(captcha)
+                    val probeSuccesses = probe.filter { it.success }
+                    if (probeSuccesses.isNotEmpty()) {
+                        results += probeSuccesses
+                        probeHitSuccess = true
+                        app.logRepository.append("SUCCESS", "5秒高频抢占命中成功，round=$rounds")
+                        break
+                    }
+
+                    lastProbeFailure = summarizeProbeFailure(rounds, probe, config)
+                    delay(200L)
+                }
+
+                if (!probeHitSuccess && lastProbeFailure != null) {
+                    // 仅保留本轮5秒探测的最后一次失败摘要，避免结果区出现过多重复失败明细。
+                    results += lastProbeFailure
+                }
+                app.logRepository.append("INFO", "5秒高频抢占结束，rounds=$rounds")
+            }
+        } catch (throwable: Throwable) {
+            val failed = ReservationResult(
+                success = false,
+                message = "每日预约执行异常：${throwable.message.orEmpty()}",
+                requestAt = LocalDateTime.now(),
+                date = LocalDate.now().plusDays(1).toString(),
+                seatCode = config.seatCode,
+                code = -1
+            )
+            results += failed
+            app.logRepository.append("ERROR", "统一执行器异常：source=$triggerSource token=$token ${failed.message}")
+        } finally {
+            app.logRepository.append("INFO", "每日预约执行结束：任务数=${results.size}")
+            Scheduler.scheduleDaily(context, trigger, config.autoEnabled)
+        }
         return RunOutcome(title = "每日预约", results = results)
+    }
+
+    private fun summarizeProbeFailure(round: Int, probe: List<ReservationResult>, config: AppConfig): ReservationResult {
+        val latestFailure = probe.lastOrNull { !it.success }
+        if (latestFailure != null) {
+            return latestFailure.copy(
+                message = "5秒高频探测第${round}轮失败摘要：${latestFailure.message}",
+                requestAt = LocalDateTime.now(),
+                code = if (latestFailure.code == 0) -1 else latestFailure.code
+            )
+        }
+        return ReservationResult(
+            success = false,
+            message = "5秒高频探测第${round}轮失败摘要：本轮无可用结果",
+            requestAt = LocalDateTime.now(),
+            date = LocalDate.now().plusDays(1).toString(),
+            seatCode = config.seatCode,
+            code = -1
+        )
+    }
+
+    private fun shouldRunBurstProbe(results: List<ReservationResult>): Boolean {
+        if (results.isEmpty()) return true
+        return results.any {
+            val msg = it.message.lowercase()
+            msg.contains("无可执行预约") ||
+                msg.contains("无可执行预约时段") ||
+                msg.contains("暂不可预定") ||
+                msg.contains("未到预约") ||
+                msg.contains("未开放") ||
+                msg.contains("不可在当前时间") ||
+                msg.contains("当前时间") ||
+                msg.contains("可预约时间") ||
+                msg.contains("后开始预约") ||
+                msg.contains("不在预约") ||
+                msg.contains("不可预约")
+        }
     }
 
     private suspend fun runPrecheck(
@@ -87,12 +173,12 @@ object ReserveTaskRunner {
         val targetAction = Scheduler.ACTION_DAILY
         app.logRepository.append(
             "INFO",
-            "定时前30秒会话预检开始：precheckAction=$action targetAction=$targetAction token=$token source=$triggerSource triggerAt=$scheduledTriggerAtMillis"
+            "定时前1分钟会话预检开始：precheckAction=$action targetAction=$targetAction token=$token source=$triggerSource triggerAt=$scheduledTriggerAtMillis"
         )
         val warmup = app.reservationEngine.warmupSession()
         app.logRepository.append(
             "INFO",
-            "定时前30秒会话预检结束：validBefore=${warmup.validBefore} refreshed=${warmup.refreshed} ready=${warmup.ready}"
+            "定时前1分钟会话预检结束：validBefore=${warmup.validBefore} refreshed=${warmup.refreshed} ready=${warmup.ready}"
         )
         if (!warmup.ready) {
             app.logRepository.append("ERROR", "会话预检失败，保持原定时触发等待后续通道执行")

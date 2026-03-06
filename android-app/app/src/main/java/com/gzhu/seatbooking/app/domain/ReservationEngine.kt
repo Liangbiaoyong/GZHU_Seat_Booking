@@ -51,10 +51,18 @@ class ReservationEngine(
     }
 
     suspend fun runForTomorrowBatch(manualCaptcha: String = ""): List<ReservationResult> {
-        return runForDateBatch(LocalDate.now().plusDays(1), manualCaptcha)
+        return runForDateBatch(LocalDate.now().plusDays(1), manualCaptcha, withFrequencyRetry = true)
     }
 
-    suspend fun runForDateBatch(targetDate: LocalDate, manualCaptcha: String = ""): List<ReservationResult> {
+    suspend fun runForTomorrowFastProbe(manualCaptcha: String = ""): List<ReservationResult> {
+        return runForDateBatch(LocalDate.now().plusDays(1), manualCaptcha, withFrequencyRetry = false)
+    }
+
+    suspend fun runForDateBatch(
+        targetDate: LocalDate,
+        manualCaptcha: String = "",
+        withFrequencyRetry: Boolean = true
+    ): List<ReservationResult> {
         logRepository.append("INFO", "开始执行手动预约流程")
         val config = configStore.getConfig()
         val dayConfigs = config.weekSchedule[targetDate.dayOfWeek].orEmpty().filter { it.enabled }
@@ -62,7 +70,15 @@ class ReservationEngine(
         if (dayConfigs.isEmpty()) {
             val msg = "${targetDate.dayOfWeek} 未启用预约"
             logRepository.append("INFO", msg)
-            return emptyList()
+            return listOf(
+                ReservationResult(
+                    success = false,
+                    message = "无可执行预约时段：$msg",
+                    requestAt = LocalDateTime.now(),
+                    date = targetDate.toString(),
+                    seatCode = config.seatCode
+                )
+            )
         }
 
         if (config.seatDevId <= 0) {
@@ -103,7 +119,7 @@ class ReservationEngine(
             }
         }
 
-        if (retryQueue.isNotEmpty()) {
+        if (withFrequencyRetry && retryQueue.isNotEmpty()) {
             logRepository.append("INFO", "检测到请求频繁阻断，开始重试队列，初始任务数=${retryQueue.size}")
             val maxRounds = 8
             val intervalMs = 9000L
@@ -128,6 +144,8 @@ class ReservationEngine(
             } else {
                 logRepository.append("SUCCESS", "重试队列已清空，阻断任务已完成")
             }
+        } else if (!withFrequencyRetry && retryQueue.isNotEmpty()) {
+            logRepository.append("INFO", "快速探测模式：检测到限频但跳过慢速重试队列")
         }
         logRepository.append("INFO", "手动预约流程结束，任务数=${results.size}")
         return results
@@ -261,6 +279,11 @@ class ReservationEngine(
             logRepository.append("ERROR", "会话预检刷新失败")
         }
         return SessionWarmupResult(validBefore = false, refreshed = refreshed, ready = refreshed)
+    }
+
+    suspend fun isSessionValid(): Boolean {
+        val config = configStore.getConfig()
+        return api.validateSession(config.token, config.cookieHeader)
     }
 
     private suspend fun ensureSession(config: AppConfig): AppConfig? {

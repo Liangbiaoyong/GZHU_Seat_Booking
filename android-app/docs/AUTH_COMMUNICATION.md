@@ -5,7 +5,7 @@
 客户端采用两类通信手段：
 
 1. **OkHttp 直连 API**：业务查询与预约提交
-2. **WebView 自动登录**：在 token/cookie 失效时自动恢复会话
+2. **纯 HTTP/HTTPS 登录链路**：在 token/cookie 失效时自动恢复会话（不依赖 WebView）
 
 ## 2. 会话凭据
 
@@ -29,20 +29,27 @@
 
 `refreshSessionByAccountPassword` 逻辑：
 
-- 进行多次策略尝试（包含回主页触发会话同步）
-- WebView 自动填充并提交登录表单
-- 从请求头捕获 token，或从 `sessionStorage/localStorage` 读取 token
-- 从 CookieManager 提取目标域 cookie
-- 刷新后再次调用 `/auth/userInfo` 二次校验
+- 进行多次纯 HTTP 登录尝试
+- 先调用 `/ic-web/auth/address` 获取服务端签发 `toLoginPage`
+- 进入 CAS 登录页并解析隐藏字段 `lt/execution/_eventId`
+- 计算 `rsa = strEnc(username + password + lt, '1', '2', '3')` 并提交 `/cas/login`
+- 手工跟随 `doAuth -> /ic-web//auth/token -> 首页` 重定向链
+- 通过 `/ic-web/auth/userInfo` 读取 `data.token` 与校验会话
+- 从 CookieJar 提取目标域 cookie，形成 `token + cookieHeader`
 
 成功后回写 `ConfigStore`，后续请求使用新会话。
 
 ## 4. 调度与认证协同
 
-为降低定时点失败概率，调度层在触发前 30 秒执行预检：
+为降低定时点失败概率，调度层在触发前 1 分钟执行预检：
 
 - 若会话可用，等待正式触发
-- 若会话刷新成功且已过触发点，立即补偿执行预约
+- 若会话刷新成功且已过触发点，按补偿规则执行预约
+
+补偿规则：
+
+- 仅在超时不超过 10 分钟的窗口内触发
+- 明日必须存在启用时段，且座位配置完整
 
 ## 5. 错误处理
 
@@ -60,4 +67,4 @@
 ## 7. 已知边界
 
 - 统一认证流程可能含验证码/风控策略，自动登录并非 100% 稳定。
-- 页面结构调整可能导致自动表单提交失效，需要同步更新 WebView 注入脚本。
+- CAS 隐藏字段或 `des.js` 逻辑变更时，需要同步更新登录实现。
