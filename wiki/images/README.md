@@ -1,8 +1,9 @@
-请将界面截图原始文件放到本目录，并使用以下命名：
+当前仓库使用以下截图文件：
 
-- config-page.png
-- room-dropdown.png
-- occupy-and-weekly.png
-- monitor-page.png
+- APP首页示意图.jpg
+- 广大图书馆房间树示意图.jpg
+- 座位配置图.jpg
+- 监测页面示意图.jpg
+- 日志页面图.jpg
 
-上传后，`wiki/Usage-Guide.md` 中的截图链接会自动生效。
+`README.md` 与 `wiki/Usage-Guide.md` 已直接引用以上文件。

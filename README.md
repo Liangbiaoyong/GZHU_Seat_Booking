@@ -55,35 +55,35 @@ GZHU Seat Booking（Android 主工程 + 认证研究脚本）。
 
 ## 界面示意图
 
-### 配置页
+### APP 首页示意图
 
-![配置页](wiki/images/config-page.jpg)
+![APP首页示意图](wiki/images/APP首页示意图.jpg)
 
-用于账号登录、会话获取、触发时间设置、自动预约开关和 Room/座位选择。
+展示配置入口、账号会话状态、任务开关与基础操作区。
 
-### 房间下拉页
+### 广大图书馆房间树示意图
 
-![房间下拉页](wiki/images/room-dropdown.jpg)
+![广大图书馆房间树示意图](wiki/images/广大图书馆房间树示意图.jpg)
 
-展示图书馆房间列表，便于快速选择目标区域。
+展示房间树与房间选择结果，便于定位目标自习区域。
 
-### 占用与每周时段页
+### 座位配置图
 
-![占用与每周时段](wiki/images/occupy-and-weekly.jpg)
+![座位配置图](wiki/images/座位配置图.jpg)
 
-查看今日/明日占用，并配置每周预约时间段。
+用于配置预约时段并查看座位占用信息。
 
-### 监测页
+### 监测页面示意图
 
-![监测页](wiki/images/monitor-page.jpg)
+![监测页面示意图](wiki/images/监测页面示意图.jpg)
 
-检查 `Alarm/Work/Job` 三通道状态、计划触发时间以及成功/失败记录。
+查看 `Alarm / Work / Job` 三通道状态与计划触发信息。
 
-### 日志页（新增）
+### 日志页面图（新增）
 
-![日志页](wiki/images/logs-page.jpg)
+![日志页面图](wiki/images/日志页面图.jpg)
 
-用于导出日志、清除日志以及定位运行异常。
+用于查看、导出和清理运行日志，便于定位异常。
 
 ## 文档导航
 
