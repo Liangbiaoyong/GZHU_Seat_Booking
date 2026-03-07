@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "GZHU_Seat_Booking"
+rootProject.name = "广州大学图书馆座位自动预约APP"
 include(":app")
 

@@ -1,34 +1,68 @@
-# 广州大学图书馆订座脚本APP
+# 广州大学图书馆座位自动预约APP
 
-广州大学图书馆座位自动预约项目（Android 主工程 + 辅助脚本）。
+广州大学图书馆座位自动预约APP（Android 主工程 + 认证研究脚本）。
 
 ## 仓库结构
 
-- `android-app/`：Android 客户端主工程（Kotlin + Compose）
-- `CODE/`：辅助脚本与研究资产（抓包/流程验证/脱敏分析）
+- `android-app/`：Android 客户端（Kotlin + Jetpack Compose）
+- `android-app/docs/`：技术文档（架构、接口、认证、运维）
+- `CODE/`：认证链路研究脚本与脱敏分析材料
 
-重点子目录：
+## 使用教程
 
-- `CODE/research/auth/`：认证链路研究脚本、技术文档、脱敏 HAR
+### 1. 应用权限与系统设置
 
-## 快速开始
+首次安装后，建议完成以下设置以保证定时任务稳定：
 
-### Android 构建
+1. 允许通知权限（用于执行结果提醒与日志导出通知）
+2. 允许后台运行、关闭电池优化限制
+3. 允许自启动与后台保活（不同厂商系统入口不同）
 
-1. 进入目录：`android-app`
-2. 构建 Debug APK：
+### 2. 登录并获取会话
 
-```powershell
-./gradlew.bat assembleDebug
-```
+1. 在`配置`页输入“统一身份认证账号/密码”
+2. 点击`登录（获取会话）`
+3. 当“会话状态”显示“已获取登录会话，可直接请求接口”表示成功
+4. 通过 `Room`、`座位`选择目标自习室和座位
 
-产物默认位于：`android-app/app/build/outputs/apk/debug/app-debug.apk`
+### 3. 设置自动预约任务
+
+1. 打开 `启动每日预约任务`
+2. 设置 `启动时间(HH:mm)`，例如 `07:15`
+3. 在“每周预约时段”中配置每天启用时段
+
+默认新增模板：
+
+1. `09:00-13:00`
+2. `13:00-16:00`
+3. `16:00-20:00`
+4. `20:00-22:15`
+5. 第 5 条及之后为空时间段
+
+### 4. 在检测页核对任务状态
+
+进入 `检测` 页后重点检查：
+
+1. `每日预约任务已在系统启用`
+2. `Alarm / Work / Job` 三通道均为绿色
+3. 计划触发时间是否符合预期
+4. 每周状态颜色是否正常（灰=关闭，绿=正常，红=配置异常）
+
+### 5. 结果与日志
+
+1. `检测`页查看成功记录/失败记录
+2. `日志`页可导出 ZIP 与清空日志
+
+## 界面示意图
+
+当前仓库未包含你本次提供的原始截图文件，已在 Wiki 教程页面预留截图位置。
+如果你希望我把截图直接嵌入仓库和 Wiki，请把图片文件放到 `android-app/docs/images/` 后我可继续补齐。
 
 ## 文档导航
 
-- 总览与构建：`android-app/README.md`
+- Android 总览：`android-app/README.md`
 - 架构设计：`android-app/docs/ARCHITECTURE.md`
-- 接口细节：`android-app/docs/API_REFERENCE.md`
-- 通讯与认证：`android-app/docs/AUTH_COMMUNICATION.md`
-- 运维与发布：`android-app/docs/OPERATIONS.md`
+- 接口参考：`android-app/docs/API_REFERENCE.md`
+- 通讯认证：`android-app/docs/AUTH_COMMUNICATION.md`
+- 运维发布：`android-app/docs/OPERATIONS.md`
 
