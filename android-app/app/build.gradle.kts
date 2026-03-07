@@ -24,8 +24,8 @@ android {
         applicationId = "com.gzhu.seatbooking.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "1.1.6"
+        versionCode = 27
+        versionName = "1.1.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

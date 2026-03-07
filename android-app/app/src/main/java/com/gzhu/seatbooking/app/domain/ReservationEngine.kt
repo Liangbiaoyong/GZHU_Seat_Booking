@@ -121,8 +121,8 @@ class ReservationEngine(
 
         if (withFrequencyRetry && retryQueue.isNotEmpty()) {
             logRepository.append("INFO", "检测到请求频繁阻断，开始重试队列，初始任务数=${retryQueue.size}")
-            val maxRounds = 8
-            val intervalMs = 9000L
+            val maxRounds = 30
+            val intervalMs = 2000L
             var round = 1
             while (retryQueue.isNotEmpty() && round <= maxRounds) {
                 delay(intervalMs)
