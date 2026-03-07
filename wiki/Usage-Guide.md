@@ -45,11 +45,34 @@
 1. 检查成功记录与失败记录。
 2. 打开 `日志` 页面导出 ZIP 日志或清空日志。
 
-## 界面截图（待补充原始文件）
+## 界面截图与说明
 
-- 配置页截图：`wiki/images/config-page.png`
-- 房间选择截图：`wiki/images/room-dropdown.png`
-- 占用与每周时段截图：`wiki/images/occupy-and-weekly.png`
-- 监测页截图：`wiki/images/monitor-page.png`
+### 配置页（账号、触发时间、会话、座位）
 
-请将你提供的截图原图放入 `wiki/images/` 目录后即可在 GitHub Wiki 中直接展示。
+![配置页](./images/config-page.jpg)
+
+说明：该页面用于输入账号密码、登录获取会话、设置启动时间和自动预约开关，并选择 Room/座位。
+
+### 房间下拉选择页
+
+![房间下拉](./images/room-dropdown.jpg)
+
+说明：点击 `Room` 右侧 `选择` 按钮后展开，按实际自习室名称选择目标区域。
+
+### 占用信息与每周预约时段
+
+![占用与每周时段](./images/occupy-and-weekly.jpg)
+
+说明：上半部分显示今日/明日占用分布，下半部分配置每周预约时段（启用、时间段、新建、删除）。
+
+### 监测页（三通道状态与结果）
+
+![监测页](./images/monitor-page.jpg)
+
+说明：用于核查 `Alarm/Work/Job` 三通道是否全绿、计划触发时间是否正确，以及成功/失败记录。
+
+### 日志页（新增截图）
+
+![日志页](./images/logs-page.jpg)
+
+说明：用于查看运行日志、导出日志 ZIP、清除日志，并排查通道状态刷新与调度行为。
