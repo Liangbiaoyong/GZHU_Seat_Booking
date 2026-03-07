@@ -17,6 +17,12 @@
 - 调度通道：`AlarmManager + WorkManager + JobScheduler`
 - 自动重试参数：`30 轮 * 2 秒`
 
-## 说明
+## 页面预览
 
-当前仓库未包含你本次对话中上传截图的原始图片文件。已在使用教程中预留截图位置，补充图片文件后即可直接显示。
+![APP首页](images/APP首页.jpg)
+
+![监测页面](images/监测页面示意图.jpg)
+
+![日志页面](images/日志页面图.jpg)
+
+详细图文步骤请查看 [使用教程](Usage-Guide.md)。
