@@ -1,4 +1,4 @@
-# 运维与发布
+﻿# 运维与发布
 
 ## 本地构建
 
@@ -10,12 +10,12 @@
 
 ## APK 命名建议
 
-`广州大学图书馆座位自动预约APP_<buildType>_v<versionName>_<versionCode>.apk`
+`GZHU_SeatBooking_<buildType>_v<versionName>_<versionCode>.apk`
 
 ## 发布流程
 
 1. 提交代码并推送 `master`
-2. 打 tag（例如 `v1.2.0`）
+2. 打 tag（例如 `v1.2.1`）
 3. 发布 GitHub Release 并上传 debug/release APK
 
 ## 重点检查项

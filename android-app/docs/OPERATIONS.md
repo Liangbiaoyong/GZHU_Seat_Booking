@@ -1,4 +1,4 @@
-# 运维与发布手册
+﻿# 运维与发布手册
 
 ## 1. 本地构建
 
@@ -16,11 +16,11 @@
 
 建议命名格式：
 
-`广州大学图书馆座位自动预约APP_<buildType>_v<versionName>_<versionCode>.apk`
+`GZHU_SeatBooking_<buildType>_v<versionName>_<versionCode>.apk`
 
 示例：
 
-`广州大学图书馆座位自动预约APP_debug_v1.2.0_28.apk`
+`GZHU_SeatBooking_debug_v1.2.1_29.apk`
 
 推荐输出目录：
 
@@ -55,11 +55,11 @@ git push -u origin main
 3. 创建 Release 并上传 APK（建议同时上传签名 release 与签名 debug）：
 
 ```powershell
-gh release create v1.2.0 \
-	android-app/app/build/outputs/apk/release/广州大学图书馆座位自动预约APP_release_v1.2.0_28.apk \
-	android-app/app/build/outputs/apk/debug/广州大学图书馆座位自动预约APP_debug_v1.2.0_28.apk \
-	--title "v1.2.0" \
-	--notes "签名 release + 签名 debug"
+gh release create v1.2.1 \
+    android-app/app/build/outputs/apk/release/GZHU_SeatBooking_release_v1.2.1_29.apk \
+    android-app/app/build/outputs/apk/debug/GZHU_SeatBooking_debug_v1.2.1_29.apk \
+    --title "v1.2.1" \
+    --notes "signed release + signed debug"
 ```
 
 ## 5. 常见故障
@@ -80,3 +80,4 @@ gh release create v1.2.0 \
 - 系统会自动进入重试队列
 - 当前默认重试参数：30 轮 * 2 秒
 - 仍失败时应降低调用频率并错峰执行
+

@@ -1,4 +1,4 @@
-# 使用教程
+﻿# 使用教程
 
 ## 1. 安装与系统设置
 
@@ -33,9 +33,9 @@
 4. `20:00-22:15`
 5. 第 5 条及之后为空时间段。
 
-## 5. 在检测页检查任务是否生效
+## 5. 在监测页检查任务是否生效
 
-1. 打开 `检测` 页面。
+1. 打开 `监测` 页面。
 2. 确认“每日预约任务已在系统启用”。
 3. 确认 `Alarm / Work / Job` 三个通道均为绿色。
 4. 核对“计划触发时间”是否正确。
@@ -50,6 +50,6 @@
 - 配置页截图：`wiki/images/config-page.png`
 - 房间选择截图：`wiki/images/room-dropdown.png`
 - 占用与每周时段截图：`wiki/images/occupy-and-weekly.png`
-- 检测页截图：`wiki/images/monitor-page.png`
+- 监测页截图：`wiki/images/monitor-page.png`
 
 请将你提供的截图原图放入 `wiki/images/` 目录后即可在 GitHub Wiki 中直接展示。

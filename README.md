@@ -1,6 +1,6 @@
-# 广州大学图书馆座位自动预约APP
+﻿# GZHU Seat Booking
 
-广州大学图书馆座位自动预约APP（Android 主工程 + 认证研究脚本）。
+GZHU Seat Booking（Android 主工程 + 认证研究脚本）。
 
 ## 仓库结构
 
@@ -39,9 +39,9 @@
 4. `20:00-22:15`
 5. 第 5 条及之后为空时间段
 
-### 4. 在检测页核对任务状态
+### 4. 在监测页核对任务状态
 
-进入 `检测` 页后重点检查：
+进入 `监测` 页后重点检查：
 
 1. `每日预约任务已在系统启用`
 2. `Alarm / Work / Job` 三通道均为绿色
@@ -50,7 +50,7 @@
 
 ### 5. 结果与日志
 
-1. `检测`页查看成功记录/失败记录
+1. `监测`页查看成功记录/失败记录
 2. `日志`页可导出 ZIP 与清空日志
 
 ## 界面示意图
@@ -65,4 +65,5 @@
 - 接口参考：`android-app/docs/API_REFERENCE.md`
 - 通讯认证：`android-app/docs/AUTH_COMMUNICATION.md`
 - 运维发布：`android-app/docs/OPERATIONS.md`
+
 

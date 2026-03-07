@@ -26,6 +26,7 @@ fun buildDefaultSlotByIndex(index: Int): TimeRangeConfig {
 data class AppConfig(
     val account: String = "",
     val password: String = "",
+    val activated: Boolean = true,
     val autoEnabled: Boolean = false,
     val triggerTime: String = "07:15",
     val roomId: Int = 0,

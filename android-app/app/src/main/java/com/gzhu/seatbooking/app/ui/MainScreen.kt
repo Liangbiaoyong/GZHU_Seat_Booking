@@ -103,7 +103,7 @@ fun MainScreen(vm: AppViewModel) {
                 Tab(
                     selected = pagerState.currentPage == 1,
                     onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                    text = { Text("检测") }
+                    text = { Text("监测") }
                 )
                 Tab(
                     selected = pagerState.currentPage == 2,
@@ -115,6 +115,7 @@ fun MainScreen(vm: AppViewModel) {
                 when (page) {
                     0 -> ConfigTab(
                         config = state.config,
+                        activated = state.config.activated,
                         todayBlocks = state.todayBlocks,
                         tomorrowBlocks = state.tomorrowBlocks,
                         roomOptions = state.roomOptions,
@@ -130,6 +131,9 @@ fun MainScreen(vm: AppViewModel) {
                         onUpdateWeekSlot = vm::updateWeekSlot,
                         onAddWeekSlot = vm::addWeekSlot,
                         onRemoveWeekSlot = vm::removeWeekSlot,
+                        onActivationSubmit = vm::verifyActivationCode,
+                        onActivatedClick = vm::notifyAlreadyActivated,
+                        onActivationRequiredForAuto = vm::notifyActivationRequiredForAuto
                     )
 
                     1 -> MonitorTab(
@@ -160,6 +164,7 @@ private fun formatResultLine(result: ReservationResult): String {
 @Composable
 private fun ConfigTab(
     config: AppConfig,
+    activated: Boolean,
     todayBlocks: List<OccupyBlock>,
     tomorrowBlocks: List<OccupyBlock>,
     roomOptions: List<RoomOption>,
@@ -175,6 +180,9 @@ private fun ConfigTab(
     onUpdateWeekSlot: (DayOfWeek, String, String, String, Boolean) -> Unit,
     onAddWeekSlot: (DayOfWeek) -> Unit,
     onRemoveWeekSlot: (DayOfWeek, String) -> Unit,
+    onActivationSubmit: (String) -> Unit,
+    onActivatedClick: () -> Unit,
+    onActivationRequiredForAuto: () -> Unit
 ) {
     var account by remember(config.account) { mutableStateOf(config.account) }
     var password by remember(config.password) { mutableStateOf(config.password) }
@@ -182,6 +190,8 @@ private fun ConfigTab(
     var roomExpanded by remember { mutableStateOf(false) }
     var seatExpanded by remember { mutableStateOf(false) }
     var showStabilityNotice by remember { mutableStateOf(false) }
+    var showActivationDialog by remember { mutableStateOf(false) }
+    var activationCodeInput by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val todayDayUpper = LocalDate.now().dayOfWeek.name
@@ -189,19 +199,39 @@ private fun ConfigTab(
     val selectedSeat = seatOptions.firstOrNull { it.devId == config.seatDevId }
     val triggerTimeError = validateTimeInput(triggerTime)
 
+    LaunchedEffect(activated) {
+        if (activated) {
+            showActivationDialog = false
+            activationCodeInput = ""
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("GZHU图书馆座位自动预约", style = MaterialTheme.typography.titleLarge)
+            Text("GZHU Seat Booking", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.weight(1f))
+            Button(onClick = {
+                if (activated) {
+                    onActivatedClick()
+                } else {
+                    showActivationDialog = true
+                }
+            }) {
+                Text(if (activated) "已激活" else "需激活")
+            }
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("启动每日预约任务")
             Spacer(modifier = Modifier.width(8.dp))
             Switch(checked = config.autoEnabled, onCheckedChange = {
+                if (!activated && it) {
+                    onActivationRequiredForAuto()
+                    return@Switch
+                }
                 onBasicConfigChange(
                     config.copy(
                         account = account,
@@ -212,9 +242,42 @@ private fun ConfigTab(
                 )
             })
             Spacer(modifier = Modifier.weight(1f))
-            Button(onClick = { showStabilityNotice = true }) {
+            TextButton(onClick = { showStabilityNotice = true }) {
                 Text("稳定运行公告")
             }
+        }
+
+        if (showActivationDialog) {
+            AlertDialog(
+                onDismissRequest = { showActivationDialog = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        onActivationSubmit(activationCodeInput)
+                    }) {
+                        Text("检验激活")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        activationCodeInput = ""
+                        showActivationDialog = false
+                    }) {
+                        Text("关闭")
+                    }
+                },
+                title = { Text("激活应用") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("需找开发者提供加密序列。")
+                        OutlinedTextField(
+                            value = activationCodeInput,
+                            onValueChange = { activationCodeInput = it },
+                            label = { Text("输入加密序列") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            )
         }
 
         if (showStabilityNotice) {

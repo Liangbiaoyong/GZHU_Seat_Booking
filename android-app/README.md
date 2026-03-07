@@ -1,6 +1,6 @@
-﻿# 广州大学图书馆座位自动预约APP（Android）
+﻿# GZHU Seat Booking（Android）
 
-广州大学图书馆座位自动预约APP Android 客户端（Kotlin + Jetpack Compose）。
+GZHU Seat Booking Android 客户端（Kotlin + Jetpack Compose）。
 
 ## 功能摘要
 
@@ -44,10 +44,11 @@
 ## 关键页面命名
 
 - `配置`：账号、会话、座位、每周时段、手动预约
-- `检测`：通道状态、计划触发时间、成功失败记录
+- `监测`：通道状态、计划触发时间、成功失败记录
 - `日志`：导出日志与清除日志
 
 ## 合规
 
 - 请遵守目标系统使用规范，避免过高频率请求。
+
 

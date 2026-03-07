@@ -1,6 +1,6 @@
-# 广州大学图书馆座位自动预约APP Wiki
+﻿# GZHU Seat Booking Wiki
 
-欢迎使用广州大学图书馆座位自动预约APP。
+欢迎使用GZHU Seat Booking。
 
 ## 页面目录
 
@@ -11,9 +11,9 @@
 
 ## 项目重要信息
 
-- 应用名称：广州大学图书馆座位自动预约APP
+- 应用名称：GZHU Seat Booking
 - Android 包名：`com.gzhu.seatbooking.app`
-- 当前版本：`1.2.0`
+- 当前版本：`1.2.1`
 - 调度通道：`AlarmManager + WorkManager + JobScheduler`
 - 自动重试参数：`30 轮 * 2 秒`
 

@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.security.MessageDigest
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -56,7 +57,7 @@ data class UiState(
     val successResults: List<ReservationResult> = emptyList(),
     val failResults: List<ReservationResult> = emptyList(),
     val serviceEnabledInSystem: Boolean = false,
-    val serviceMonitorText: String = "未检测",
+    val serviceMonitorText: String = "未监测",
     val dailyServiceState: TriggerServiceUiState = TriggerServiceUiState(),
     val weekServiceStates: Map<DayOfWeek, WeekServiceState> = DayOfWeek.entries.associateWith { WeekServiceState.DISABLED },
     val todayLogs: List<String> = emptyList(),
@@ -96,7 +97,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun updateBasicConfig(config: AppConfig) {
         viewModelScope.launch {
             val current = app.configStore.getConfig()
-            val effectiveConfig = config
+            val merged = config.copy(activated = config.activated || current.activated)
+            val effectiveConfig = if (!merged.activated && merged.autoEnabled) {
+                merged.copy(autoEnabled = false)
+            } else {
+                merged
+            }
             if (effectiveConfig == current) {
                 _uiState.value = _uiState.value.copy(
                     config = effectiveConfig,
@@ -128,7 +134,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(
                 config = effectiveConfig,
                 weekServiceStates = buildWeekServiceStates(effectiveConfig),
-                toast = "配置已自动保存"
+                toast = if (!config.activated && config.autoEnabled) "请先激活后再开启启动每日预约任务" else "配置已自动保存"
             )
             refreshLogs()
             refreshServiceMonitor()
@@ -211,6 +217,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             app.logRepository.append("INFO", "用户触发退出登录：已清除token/cookie，用于自动重登录测试")
             refreshLogs()
         }
+    }
+
+    fun verifyActivationCode(inputCode: String) {
+        viewModelScope.launch {
+            val normalizedInput = inputCode.trim().lowercase()
+            if (normalizedInput.isBlank()) {
+                _uiState.value = _uiState.value.copy(toast = "请输入加密序列")
+                return@launch
+            }
+            val todayText = LocalDate.now().format(DateTimeFormatter.ofPattern("yyMMdd")) + "?"
+            val expected = sha256Hex(todayText)
+            if (normalizedInput == expected) {
+                val updated = _uiState.value.config.copy(activated = true)
+                app.configStore.save(updated)
+                _uiState.value = _uiState.value.copy(config = updated, toast = "激活成功")
+                app.logRepository.append("SUCCESS", "激活校验成功")
+            } else {
+                _uiState.value = _uiState.value.copy(toast = "加密序列无效")
+                app.logRepository.append("ERROR", "激活校验失败：输入序列不匹配")
+            }
+            refreshLogs()
+        }
+    }
+
+    fun notifyAlreadyActivated() {
+        _uiState.value = _uiState.value.copy(toast = "已经激活，可以正常使用了")
+    }
+
+    fun notifyActivationRequiredForAuto() {
+        _uiState.value = _uiState.value.copy(toast = "请先激活后再开启启动每日预约任务")
     }
 
     private suspend fun refreshRoomAndSeatOptionsInternal() {
@@ -461,6 +497,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun createDefaultSlot(index: Int): TimeRangeConfig {
         return buildDefaultSlotByIndex(index)
+    }
+
+    private fun sha256Hex(value: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     private fun notifyLogExportPath(path: String, zipFile: File) {
