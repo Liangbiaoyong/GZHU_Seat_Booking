@@ -224,7 +224,7 @@ private fun ConfigTab(
                 )
             })
             Spacer(modifier = Modifier.weight(1f))
-            TextButton(onClick = { showStabilityNotice = true }) {
+            Button(onClick = { showStabilityNotice = true }) {
                 Text("‼️稳定运行必看‼️")
             }
         }
