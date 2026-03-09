@@ -18,7 +18,7 @@ class AlarmDispatchWorker(appContext: Context, params: WorkerParameters) : Corou
 
         app.logRepository.append(
             "INFO",
-            "Worker兜底触发: action=$action source=$triggerSource token=$token triggerAt=$scheduledTriggerAtMillis"
+            "Worker兜底触发: action=$action source=$triggerSource token=$token offset=$targetOffsetDays triggerAt=$scheduledTriggerAtMillis"
         )
         return try {
             val outcome = ReserveTaskRunner.run(
@@ -34,6 +34,11 @@ class AlarmDispatchWorker(appContext: Context, params: WorkerParameters) : Corou
                 val summary = ReservationResultPipeline.record(app, triggerSource, outcome.title, outcome.results)
                 ReserveNotifier.notifyReservationResult(applicationContext, triggerSource, outcome.title, outcome.results)
                 app.logRepository.append("INFO", "Worker执行结束：${outcome.title} 成功${summary.successCount}，失败${summary.failCount}")
+            } else {
+                app.logRepository.append(
+                    "INFO",
+                    "Worker执行结束：统一执行器未返回结果（可能去重跳过） action=$action source=$triggerSource token=$token"
+                )
             }
             Result.success()
         } catch (throwable: Throwable) {

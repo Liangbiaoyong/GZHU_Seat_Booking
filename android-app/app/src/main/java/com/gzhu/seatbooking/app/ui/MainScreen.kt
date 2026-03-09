@@ -131,8 +131,6 @@ fun MainScreen(vm: AppViewModel) {
                         onUpdateWeekSlot = vm::updateWeekSlot,
                         onAddWeekSlot = vm::addWeekSlot,
                         onRemoveWeekSlot = vm::removeWeekSlot,
-                        onActivationSubmit = vm::verifyActivationCode,
-                        onActivatedClick = vm::notifyAlreadyActivated,
                         onActivationRequiredForAuto = vm::notifyActivationRequiredForAuto
                     )
 
@@ -180,8 +178,6 @@ private fun ConfigTab(
     onUpdateWeekSlot: (DayOfWeek, String, String, String, Boolean) -> Unit,
     onAddWeekSlot: (DayOfWeek) -> Unit,
     onRemoveWeekSlot: (DayOfWeek, String) -> Unit,
-    onActivationSubmit: (String) -> Unit,
-    onActivatedClick: () -> Unit,
     onActivationRequiredForAuto: () -> Unit
 ) {
     var account by remember(config.account) { mutableStateOf(config.account) }
@@ -190,21 +186,13 @@ private fun ConfigTab(
     var roomExpanded by remember { mutableStateOf(false) }
     var seatExpanded by remember { mutableStateOf(false) }
     var showStabilityNotice by remember { mutableStateOf(false) }
-    var showActivationDialog by remember { mutableStateOf(false) }
-    var activationCodeInput by remember { mutableStateOf("") }
+    var showTutorialDialog by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val todayDayUpper = LocalDate.now().dayOfWeek.name
     val tomorrowDayUpper = LocalDate.now().plusDays(1).dayOfWeek.name
     val selectedSeat = seatOptions.firstOrNull { it.devId == config.seatDevId }
     val triggerTimeError = validateTimeInput(triggerTime)
-
-    LaunchedEffect(activated) {
-        if (activated) {
-            showActivationDialog = false
-            activationCodeInput = ""
-        }
-    }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -213,14 +201,8 @@ private fun ConfigTab(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("GZHU Seat Booking", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.weight(1f))
-            Button(onClick = {
-                if (activated) {
-                    onActivatedClick()
-                } else {
-                    showActivationDialog = true
-                }
-            }) {
-                Text(if (activated) "已激活" else "需激活")
+            Button(onClick = { showTutorialDialog = true }) {
+                Text("‼️教程‼️")
             }
         }
 
@@ -243,38 +225,29 @@ private fun ConfigTab(
             })
             Spacer(modifier = Modifier.weight(1f))
             TextButton(onClick = { showStabilityNotice = true }) {
-                Text("稳定运行公告")
+                Text("‼️稳定运行必看‼️")
             }
         }
 
-        if (showActivationDialog) {
+        if (showTutorialDialog) {
             AlertDialog(
-                onDismissRequest = { showActivationDialog = false },
+                onDismissRequest = { showTutorialDialog = false },
                 confirmButton = {
                     TextButton(onClick = {
-                        onActivationSubmit(activationCodeInput)
+                        showTutorialDialog = false
                     }) {
-                        Text("检验激活")
+                        Text("我知道了")
                     }
                 },
-                dismissButton = {
-                    TextButton(onClick = {
-                        activationCodeInput = ""
-                        showActivationDialog = false
-                    }) {
-                        Text("关闭")
-                    }
-                },
-                title = { Text("激活应用") },
+                title = { Text("应用使用教程") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("需找开发者提供加密序列。")
-                        OutlinedTextField(
-                            value = activationCodeInput,
-                            onValueChange = { activationCodeInput = it },
-                            label = { Text("输入加密序列") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Text("1. 在配置页输入账号密码，点击【登录（获取会话）】。")
+                        Text("2. 登录成功后选择房间和座位。")
+                        Text("3. 在每周预约时段里填写并启用需要的时间段。")
+                        Text("4. 完成时间表后，记得按下【启动每日预约任务】开关。")
+                        Text("5. 进入【监测】页面，检查预约定时服务和每周状态是否正常。")
+                        Text("6. 如果自动预约失败，可在配置页底部按手动按钮一键执行时间表中的已启用时段。")
                     }
                 }
             )
@@ -288,12 +261,11 @@ private fun ConfigTab(
                         Text("我知道了")
                     }
                 },
-                title = { Text("稳定运行建议") },
+                title = { Text("软件进程能否活到预约时间看你了") },
                 text = {
                     Text(
-                        "请开启：锁后台、后台无限制、自启动。\n\n" +
-                            "为了稳定运行，建议睡前先打开应用并让服务进入前台。\n\n" +
-                            "不同品牌系统对后台/定时任务的限制策略不同，可能影响唤醒和执行稳定性。"
+                        "不同品牌系统对后台服务的限制不同，对本应用有不同程度的影响。为了确保预约业务稳定自动运行，需确认下面要求完成。\n\n"+"‼️必开权限‼️\n"+"锁后台、后台无限制、自启动，一个都不能少。如果不会找，上网或问AI\"如何开启你手机系统的后台相关权限\"\n" +
+                            "❗可选（最好照做）：睡前打开应用，保持在应用主页息屏。\n" + "❗使用自动预约任务注意确保网络在预约启动时间是通畅的"
                     )
                 }
             )

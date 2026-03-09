@@ -43,6 +43,14 @@
 2. WorkManager（系统调度兜底）
 3. JobScheduler（持久化任务兜底）
 
+### 3.0 计划时间闸门（v1.3.0）
+
+无论 Alarm / Work / Job 哪个通道被系统提前拉起，真正的预约执行都会进入“计划时间闸门”：
+
+- 若当前时刻 < 计划触发时间：等待到计划时刻再执行业务
+- 等待期间记录进度日志：`0% / 25% / 50% / 75% / 100%`
+- 到达计划时刻后再进行 token 去重，避免提前执行导致 5 秒高频探测提前耗尽
+
 ### 3.1 预检机制
 
 在目标触发前 `1min` 调度 `ACTION_DAILY_PRECHECK`：
@@ -50,6 +58,7 @@
 - 执行会话 warmup
 - 若刷新成功且当前已晚于原触发时间，则按补偿规则判断是否执行
 - 否则等待正式触发时刻
+- 保持与计划时间闸门兼容：预检只做监测与重连，不提前执行正式预约
 
 监测与调度具备自愈能力：
 
@@ -65,14 +74,21 @@
 `Scheduler` 触发后统一进入 `ReserveTaskRunner.run(...)`：
 
 - `ACTION_DAILY`
+  - 计划时间闸门等待
   - 去重
   - 调 `ReservationEngine.runForTomorrowBatch`
+  - 遇到 `Unable to resolve host` 进入 `5s` 一次、最长 `5min` 的网络恢复重试
   - 执行后重排下一次每日任务，并刷新三通道状态
 - `ACTION_DAILY_PRECHECK`
   - 调 `ReservationEngine.warmupSession`
   - 按结果决定是否立即补偿执行 `ACTION_DAILY`
 
 执行结果由 `ReservationResultPipeline.record(...)` 入库，并由 `ReserveNotifier` 发通知。
+
+其中 `ReservationResultPipeline` 在 v1.3.0 新增了“限频瞬时失败折叠”：
+
+- 同一日期+座位+时段如果后续成功，之前的“请求频繁/操作频繁”失败不会进入失败记录面板
+- 但所有原始尝试仍完整写入日志，便于排障追踪
 
 ## 5. 关键配置模型
 

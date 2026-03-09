@@ -37,7 +37,7 @@ class ReserveAlarmReceiver : BroadcastReceiver() {
         appendLog(
             context,
             "INFO",
-            "Alarm触发已转交WorkManager action=$action source=$triggerSource token=$testToken offset=$targetOffsetDays triggerAt=$targetTriggerAt"
+            "Alarm触发已转交WorkManager action=$action source=$triggerSource token=$testToken offset=$targetOffsetDays triggerAt=$targetTriggerAt receiver=ReserveAlarmReceiver"
         )
         Log.d("ReserveAlarmReceiver", "enqueue dispatch action=$action source=$triggerSource token=$testToken triggerAt=$targetTriggerAt")
     }

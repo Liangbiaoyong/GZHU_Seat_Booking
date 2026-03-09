@@ -20,7 +20,7 @@
 
 示例：
 
-`GZHU_SeatBooking_debug_v1.2.1_29.apk`
+`GZHU_SeatBooking_debug_v1.3.0_30.apk`
 
 推荐输出目录：
 
@@ -44,7 +44,7 @@ git add .
 git commit -m "chore: standardize repository and docs"
 ```
 
-2. 关联远程并推送：
+1. 关联远程并推送：
 
 ```powershell
 git remote add origin <your-repo-url>
@@ -52,13 +52,13 @@ git branch -M main
 git push -u origin main
 ```
 
-3. 创建 Release 并上传 APK（建议同时上传签名 release 与签名 debug）：
+1. 创建 Release 并上传 APK（建议同时上传签名 release 与签名 debug）：
 
 ```powershell
-gh release create v1.2.1 \
-    android-app/app/build/outputs/apk/release/GZHU_SeatBooking_release_v1.2.1_29.apk \
-    android-app/app/build/outputs/apk/debug/GZHU_SeatBooking_debug_v1.2.1_29.apk \
-    --title "v1.2.1" \
+gh release create v1.3.0 \
+    android-app/app/build/outputs/apk/release/GZHU_SeatBooking_release_v1.3.0_30.apk \
+    android-app/app/build/outputs/apk/debug/GZHU_SeatBooking_debug_v1.3.0_30.apk \
+    --title "v1.3.0" \
     --notes "signed release + signed debug"
 ```
 
@@ -68,16 +68,19 @@ gh release create v1.2.1 \
 
 - 检查系统电池优化是否限制应用后台
 - 查看日志是否出现重复触发被去重或会话失效
+- v1.3.0 起，提前拉起会进入计划时间闸门等待并记录 0/25/50/75/100 进度日志
 
 ### 5.2 会话刷新失败
 
 - 账号密码是否有效
 - 目标网站认证流程是否变化（登录表单字段变化）
 - 网络是否可访问 `libbooking.gzhu.edu.cn`
+- 若出现 `Unable to resolve host`，系统会自动每 5s 重试，最长 5min
 
 ### 5.3 预约返回“请求频繁”
 
 - 系统会自动进入重试队列
 - 当前默认重试参数：30 轮 * 2 秒
 - 仍失败时应降低调用频率并错峰执行
+- 若最终成功，该时段不会进入失败记录区，但日志会完整保留每次尝试
 

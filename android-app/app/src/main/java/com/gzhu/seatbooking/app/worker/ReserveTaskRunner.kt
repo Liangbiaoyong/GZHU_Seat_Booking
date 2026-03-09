@@ -5,6 +5,7 @@ import com.gzhu.seatbooking.app.GzhuSeatBookingApp
 import com.gzhu.seatbooking.app.data.model.AppConfig
 import com.gzhu.seatbooking.app.data.model.ReservationResult
 import kotlinx.coroutines.delay
+import java.net.UnknownHostException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -32,7 +33,8 @@ object ReserveTaskRunner {
                 captcha = captcha,
                 token = token,
                 triggerSource = triggerSource,
-                targetOffsetDays = targetOffsetDays
+                targetOffsetDays = targetOffsetDays,
+                scheduledTriggerAtMillis = scheduledTriggerAtMillis
             )
 
             Scheduler.ACTION_DAILY_PRECHECK -> {
@@ -60,11 +62,21 @@ object ReserveTaskRunner {
         captcha: String,
         token: String,
         triggerSource: String,
-        targetOffsetDays: Long
+        targetOffsetDays: Long,
+        scheduledTriggerAtMillis: Long
     ): RunOutcome? {
         val app = context.applicationContext as GzhuSeatBookingApp
         val config = app.configStore.getConfig()
         val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 15))
+
+        waitUntilScheduledTrigger(
+            app = app,
+            action = action,
+            token = token,
+            triggerSource = triggerSource,
+            scheduledTriggerAtMillis = scheduledTriggerAtMillis
+        )
+
         if (!Scheduler.tryConsumeExecutionToken(context, action, token, triggerSource)) {
             val status = runCatching { Scheduler.queryServiceStatus(context) }.getOrNull()
             val health = status?.let { Scheduler.evaluateDailyHealth(it) }
@@ -84,7 +96,7 @@ object ReserveTaskRunner {
         app.logRepository.append("INFO", "统一执行器开始执行每日预约：source=$triggerSource token=$token")
         val results = mutableListOf<ReservationResult>()
         try {
-            results += app.reservationEngine.runForTomorrowBatch(captcha)
+            results += runTomorrowBatchWithDnsRecovery(app, captcha, triggerSource, token)
 
             if (shouldRunBurstProbe(results)) {
                 app.logRepository.append("INFO", "命中抢占条件（无可执行/暂不可预定），启动5秒高频抢占")
@@ -206,11 +218,114 @@ object ReserveTaskRunner {
                 captcha = captcha,
                 token = token,
                 triggerSource = "$triggerSource-immediate-after-refresh",
-                targetOffsetDays = 1L
+                targetOffsetDays = 1L,
+                scheduledTriggerAtMillis = scheduledTriggerAtMillis
             )
         }
         app.logRepository.append("INFO", "会话预检完成，继续等待原触发时刻执行")
         return null
+    }
+
+    private suspend fun waitUntilScheduledTrigger(
+        app: GzhuSeatBookingApp,
+        action: String,
+        token: String,
+        triggerSource: String,
+        scheduledTriggerAtMillis: Long
+    ) {
+        if (scheduledTriggerAtMillis <= 0L) return
+        val now = System.currentTimeMillis()
+        if (now >= scheduledTriggerAtMillis) {
+            app.logRepository.append(
+                "INFO",
+                "执行闸门检查：已到计划触发时间，立即执行 action=$action source=$triggerSource token=$token"
+            )
+            return
+        }
+
+        val totalWaitMs = (scheduledTriggerAtMillis - now).coerceAtLeast(1L)
+        val progressPoints = listOf(0, 25, 50, 75, 100)
+        app.logRepository.append(
+            "INFO",
+            "执行闸门等待开始：action=$action source=$triggerSource token=$token targetAt=$scheduledTriggerAtMillis totalWaitMs=$totalWaitMs progress=0%"
+        )
+
+        progressPoints.drop(1).forEach { progress ->
+            val targetPointTime = now + (totalWaitMs * progress / 100)
+            val delayMs = (targetPointTime - System.currentTimeMillis()).coerceAtLeast(0L)
+            if (delayMs > 0L) {
+                delay(delayMs)
+            }
+            val remainMs = (scheduledTriggerAtMillis - System.currentTimeMillis()).coerceAtLeast(0L)
+            val message = if (progress == 100) {
+                "执行闸门等待结束：action=$action source=$triggerSource token=$token progress=100% remainMs=$remainMs，开始执行预约"
+            } else {
+                "执行闸门等待中：action=$action source=$triggerSource token=$token progress=$progress% remainMs=$remainMs"
+            }
+            app.logRepository.append("INFO", message)
+        }
+    }
+
+    private suspend fun runTomorrowBatchWithDnsRecovery(
+        app: GzhuSeatBookingApp,
+        captcha: String,
+        triggerSource: String,
+        token: String
+    ): List<ReservationResult> {
+        val retryIntervalMs = 5_000L
+        val retryDeadline = System.currentTimeMillis() + 5 * 60_000L
+        var attempt = 1
+        var firstFailureAt = 0L
+
+        while (true) {
+            try {
+                val results = app.reservationEngine.runForTomorrowBatch(captcha)
+                if (attempt > 1) {
+                    val recoveredMs = System.currentTimeMillis() - firstFailureAt
+                    app.logRepository.append(
+                        "SUCCESS",
+                        "域名解析已恢复，继续原业务：source=$triggerSource token=$token attempts=$attempt recoveredMs=$recoveredMs"
+                    )
+                }
+                return results
+            } catch (throwable: Throwable) {
+                if (!isHostResolveFailure(throwable)) {
+                    throw throwable
+                }
+                if (firstFailureAt == 0L) {
+                    firstFailureAt = System.currentTimeMillis()
+                    app.logRepository.append(
+                        "WARN",
+                        "检测到域名解析失败，进入5秒重试，最长5分钟：source=$triggerSource token=$token message=${throwable.message.orEmpty()}"
+                    )
+                }
+
+                val now = System.currentTimeMillis()
+                if (now >= retryDeadline) {
+                    app.logRepository.append(
+                        "ERROR",
+                        "域名解析重试超时（5分钟），结束等待：source=$triggerSource token=$token attempts=$attempt"
+                    )
+                    throw throwable
+                }
+
+                val remainMs = (retryDeadline - now).coerceAtLeast(0L)
+                app.logRepository.append(
+                    "WARN",
+                    "域名解析重试第${attempt}次失败，5秒后重试：source=$triggerSource token=$token remainMs=$remainMs message=${throwable.message.orEmpty()}"
+                )
+                attempt += 1
+                delay(retryIntervalMs)
+            }
+        }
+    }
+
+    private fun isHostResolveFailure(throwable: Throwable): Boolean {
+        if (throwable is UnknownHostException) return true
+        val message = throwable.message.orEmpty().lowercase()
+        if (message.contains("unable to resolve host")) return true
+        if (message.contains("no address associated with hostname")) return true
+        return throwable.cause?.let { isHostResolveFailure(it) } == true
     }
 }
 
