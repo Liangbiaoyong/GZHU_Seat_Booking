@@ -1,6 +1,7 @@
 ﻿package com.gzhu.seatbooking.app.data.local
 
 import android.content.Context
+import android.os.Environment
 import android.util.Log
 import com.gzhu.seatbooking.app.data.model.LogEntry
 import org.json.JSONArray
@@ -25,7 +26,7 @@ class LogRepository(private val context: Context) {
     private val lock = Any()
 
     private fun logDir(): File = File(context.filesDir, "logs").apply { mkdirs() }
-    private fun exportDir(): File = File(context.cacheDir, "log_exports").apply { mkdirs() }
+    private fun exportDir(): File = resolveExportDir().apply { mkdirs() }
 
     fun append(level: String, message: String) {
         synchronized(lock) {
@@ -54,7 +55,8 @@ class LogRepository(private val context: Context) {
                 }?.sortedBy { it.name }.orEmpty()
                 if (logs.isEmpty()) return null
 
-                val output = File(exportDir(), "GZHU_SeatBooking_logs_${LocalDateTime.now().format(exportNameFormatter)}.zip")
+                val outputDir = exportDir()
+                val output = File(outputDir, "GZHU_SeatBooking_logs_${LocalDateTime.now().format(exportNameFormatter)}.zip")
                 ZipOutputStream(FileOutputStream(output)).use { zip ->
                     logs.forEach { logFile ->
                         zip.putNextEntry(ZipEntry(logFile.name))
@@ -62,6 +64,7 @@ class LogRepository(private val context: Context) {
                         zip.closeEntry()
                     }
                 }
+                append("INFO", "日志导出目录：${outputDir.absolutePath}")
                 output
             }.onFailure {
                 Log.e(TAG, "exportLogsZip failed", it)
@@ -133,6 +136,27 @@ class LogRepository(private val context: Context) {
                 file.delete()
             }
         }
+    }
+
+    private fun resolveExportDir(): File {
+        // Prefer public Download directory first for easier user access.
+        val publicDownload = runCatching {
+            @Suppress("DEPRECATION")
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        }.getOrNull()
+        if (publicDownload != null && (publicDownload.exists() || publicDownload.mkdirs())) {
+            return File(publicDownload, "GZHU_SeatBooking").apply { mkdirs() }
+        }
+
+        // Fallback to app-specific external files directory when public Download is unavailable.
+        val externalAppDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+        if (externalAppDir != null && (externalAppDir.exists() || externalAppDir.mkdirs())) {
+            return File(externalAppDir, "GZHU_SeatBooking").apply { mkdirs() }
+        }
+
+        // Last fallback keeps export functional even in constrained storage environments.
+        return File(context.cacheDir, "log_exports")
     }
 
     private fun normalizeLevel(level: String): String {

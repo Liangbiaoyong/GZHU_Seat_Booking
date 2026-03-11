@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.gzhu.seatbooking.app.GzhuSeatBookingApp
 import com.gzhu.seatbooking.app.domain.ReservationResultPipeline
+import kotlinx.coroutines.CancellationException
 
 class AlarmDispatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
@@ -41,6 +42,12 @@ class AlarmDispatchWorker(appContext: Context, params: WorkerParameters) : Corou
                 )
             }
             Result.success()
+        } catch (cancelled: CancellationException) {
+            app.logRepository.append(
+                "WARN",
+                "Worker执行被取消: action=$action source=$triggerSource token=$token triggerAt=$scheduledTriggerAtMillis message=${cancelled.message.orEmpty()}"
+            )
+            throw cancelled
         } catch (throwable: Throwable) {
             app.logRepository.append(
                 "ERROR",

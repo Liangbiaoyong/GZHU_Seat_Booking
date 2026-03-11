@@ -4,6 +4,7 @@ import android.content.Context
 import com.gzhu.seatbooking.app.GzhuSeatBookingApp
 import com.gzhu.seatbooking.app.data.model.AppConfig
 import com.gzhu.seatbooking.app.data.model.ReservationResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import java.net.UnknownHostException
 import java.time.LocalDate
@@ -69,22 +70,39 @@ object ReserveTaskRunner {
         val config = app.configStore.getConfig()
         val trigger = runCatching { LocalTime.parse(config.triggerTime) }.getOrDefault(LocalTime.of(7, 15))
 
-        waitUntilScheduledTrigger(
-            app = app,
-            action = action,
-            token = token,
-            triggerSource = triggerSource,
-            scheduledTriggerAtMillis = scheduledTriggerAtMillis
-        )
+        val now = System.currentTimeMillis()
+        if (scheduledTriggerAtMillis > now + 1_500L) {
+            val delayMs = scheduledTriggerAtMillis - now
+            val deferred = Scheduler.enqueueDeferredDispatch(
+                context = context,
+                action = action,
+                captcha = captcha,
+                token = token,
+                triggerSource = triggerSource,
+                targetOffsetDays = targetOffsetDays,
+                scheduledTriggerAtMillis = scheduledTriggerAtMillis,
+                delayMs = delayMs
+            )
+            if (deferred) {
+                app.logRepository.append(
+                    "INFO",
+                    "执行闸门改为重投递模式：当前不阻塞等待 action=$action source=$triggerSource token=$token delayMs=$delayMs"
+                )
+                return null
+            }
+            app.logRepository.append(
+                "WARN",
+                "执行闸门重投递失败，回退为当前执行 action=$action source=$triggerSource token=$token"
+            )
+        }
 
         if (!Scheduler.tryConsumeExecutionToken(context, action, token, triggerSource)) {
             val status = runCatching { Scheduler.queryServiceStatus(context) }.getOrNull()
             val health = status?.let { Scheduler.evaluateDailyHealth(it) }
             if (config.autoEnabled && health != null && !health.allReady) {
-                runCatching { Scheduler.scheduleDaily(context, trigger, config.autoEnabled) }
                 app.logRepository.append(
                     "WARN",
-                    "去重命中但检测到通道缺失，已触发自愈重建：missing=${health.missing.joinToString(",")}" 
+                    "去重命中且通道缺失：为避免取消运行中Work，跳过即时重建 missing=${health.missing.joinToString(",")}" 
                 )
             }
             app.logRepository.append(
@@ -95,10 +113,13 @@ object ReserveTaskRunner {
         }
         app.logRepository.append("INFO", "统一执行器开始执行每日预约：source=$triggerSource token=$token")
         val results = mutableListOf<ReservationResult>()
+        var stage = "start"
         try {
+            stage = "dns-retry"
             results += runTomorrowBatchWithDnsRecovery(app, captcha, triggerSource, token)
 
             if (shouldRunBurstProbe(results)) {
+                stage = "burst-probe"
                 app.logRepository.append("INFO", "命中抢占条件（无可执行/暂不可预定），启动5秒高频抢占")
                 val deadline = System.currentTimeMillis() + 5_000L
                 var rounds = 0
@@ -126,6 +147,13 @@ object ReserveTaskRunner {
                 }
                 app.logRepository.append("INFO", "5秒高频抢占结束，rounds=$rounds")
             }
+            stage = "done"
+        } catch (cancelled: CancellationException) {
+            app.logRepository.append(
+                "WARN",
+                "统一执行器被取消：stage=$stage action=$action source=$triggerSource token=$token message=${cancelled.message.orEmpty()}"
+            )
+            return null
         } catch (throwable: Throwable) {
             val failed = ReservationResult(
                 success = false,
@@ -138,6 +166,7 @@ object ReserveTaskRunner {
             results += failed
             app.logRepository.append("ERROR", "统一执行器异常：source=$triggerSource token=$token ${failed.message}")
         } finally {
+            Scheduler.finishExecution(context, token, triggerSource)
             app.logRepository.append("INFO", "每日预约执行结束：任务数=${results.size}")
             runCatching { Scheduler.scheduleDaily(context, trigger, config.autoEnabled) }
                 .onFailure { app.logRepository.append("ERROR", "每日预约结束后重建通道失败：${it.message.orEmpty()}") }
@@ -226,46 +255,6 @@ object ReserveTaskRunner {
         return null
     }
 
-    private suspend fun waitUntilScheduledTrigger(
-        app: GzhuSeatBookingApp,
-        action: String,
-        token: String,
-        triggerSource: String,
-        scheduledTriggerAtMillis: Long
-    ) {
-        if (scheduledTriggerAtMillis <= 0L) return
-        val now = System.currentTimeMillis()
-        if (now >= scheduledTriggerAtMillis) {
-            app.logRepository.append(
-                "INFO",
-                "执行闸门检查：已到计划触发时间，立即执行 action=$action source=$triggerSource token=$token"
-            )
-            return
-        }
-
-        val totalWaitMs = (scheduledTriggerAtMillis - now).coerceAtLeast(1L)
-        val progressPoints = listOf(0, 25, 50, 75, 100)
-        app.logRepository.append(
-            "INFO",
-            "执行闸门等待开始：action=$action source=$triggerSource token=$token targetAt=$scheduledTriggerAtMillis totalWaitMs=$totalWaitMs progress=0%"
-        )
-
-        progressPoints.drop(1).forEach { progress ->
-            val targetPointTime = now + (totalWaitMs * progress / 100)
-            val delayMs = (targetPointTime - System.currentTimeMillis()).coerceAtLeast(0L)
-            if (delayMs > 0L) {
-                delay(delayMs)
-            }
-            val remainMs = (scheduledTriggerAtMillis - System.currentTimeMillis()).coerceAtLeast(0L)
-            val message = if (progress == 100) {
-                "执行闸门等待结束：action=$action source=$triggerSource token=$token progress=100% remainMs=$remainMs，开始执行预约"
-            } else {
-                "执行闸门等待中：action=$action source=$triggerSource token=$token progress=$progress% remainMs=$remainMs"
-            }
-            app.logRepository.append("INFO", message)
-        }
-    }
-
     private suspend fun runTomorrowBatchWithDnsRecovery(
         app: GzhuSeatBookingApp,
         captcha: String,
@@ -288,6 +277,12 @@ object ReserveTaskRunner {
                     )
                 }
                 return results
+            } catch (cancelled: CancellationException) {
+                app.logRepository.append(
+                    "WARN",
+                    "DNS重试阶段任务被取消：source=$triggerSource token=$token attempt=$attempt message=${cancelled.message.orEmpty()}"
+                )
+                throw cancelled
             } catch (throwable: Throwable) {
                 if (!isHostResolveFailure(throwable)) {
                     throw throwable

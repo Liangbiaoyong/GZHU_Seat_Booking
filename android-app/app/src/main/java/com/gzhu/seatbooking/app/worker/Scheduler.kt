@@ -40,6 +40,9 @@ object Scheduler {
     private const val KEY_DAILY_PENDING_TOKEN = "daily_pending_token"
     private const val KEY_DAILY_ALARM_ACTIVE = "daily_alarm_active"
     private const val KEY_DAILY_LAST_CATCHUP = "daily_last_catchup"
+    private const val KEY_EXECUTION_IN_PROGRESS = "execution_in_progress"
+    private const val KEY_EXECUTION_TOKEN = "execution_token"
+    private const val KEY_EXECUTION_SOURCE = "execution_source"
     private const val KEY_CONSUMED_PREFIX = "consumed_"
     private const val TAG = "ReserveScheduler"
 
@@ -47,6 +50,7 @@ object Scheduler {
     private const val REQ_DAILY_PRECHECK = 1003
     private const val DAILY_WORK_NAME = "daily_reserve_work"
     private const val DAILY_PRECHECK_WORK_NAME = "daily_precheck_work"
+    private const val DEFERRED_WORK_PREFIX = "daily_deferred_work_"
     private const val JOB_DAILY_ID = 30001
     private const val JOB_DAILY_PRECHECK_ID = 30003
     private const val PRECHECK_ADVANCE_MILLIS = 60_000L
@@ -71,18 +75,27 @@ object Scheduler {
         val workManager = WorkManager.getInstance(context)
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val jobScheduler = context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
-
-        cancelDailyChannels(context)
         if (!enabled) {
+            cancelDailyChannels(context)
             context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
                 .putBoolean(KEY_DAILY_ENABLED, false)
                 .remove(KEY_NEXT_TRIGGER)
                 .remove(KEY_DAILY_PENDING_TOKEN)
+                .putBoolean(KEY_EXECUTION_IN_PROGRESS, false)
+                .remove(KEY_EXECUTION_TOKEN)
+                .remove(KEY_EXECUTION_SOURCE)
                 .putBoolean(KEY_DAILY_ALARM_ACTIVE, false)
                 .apply()
             appendLog(context, "INFO", "每日任务已关闭")
             return
         }
+
+        if (isExecutionInProgress(context)) {
+            appendLog(context, "WARN", "检测到每日任务执行中，跳过重建以避免取消正在运行的Work")
+            return
+        }
+
+        cancelDailyChannels(context)
 
         val now = LocalDateTime.now()
         var next = now.withHour(triggerTime.hour).withMinute(triggerTime.minute).withSecond(0).withNano(0)
@@ -170,11 +183,69 @@ object Scheduler {
             prefs.edit()
                 .putBoolean(consumedKey, true)
                 .putLong("${consumedKey}_at", System.currentTimeMillis())
+                .putBoolean(KEY_EXECUTION_IN_PROGRESS, true)
+                .putString(KEY_EXECUTION_TOKEN, key)
+                .putString(KEY_EXECUTION_SOURCE, source)
                 .remove(KEY_DAILY_PENDING_TOKEN)
                 .apply()
             appendLog(context, "INFO", "触发已消费 action=$action token=$key source=$source")
             return true
         }
+    }
+
+    fun finishExecution(context: Context, token: String, source: String) {
+        val key = token.ifBlank { return }
+        val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        synchronized(this) {
+            val runningToken = prefs.getString(KEY_EXECUTION_TOKEN, "").orEmpty()
+            if (runningToken.isBlank() || runningToken != key) return
+            prefs.edit()
+                .putBoolean(KEY_EXECUTION_IN_PROGRESS, false)
+                .remove(KEY_EXECUTION_TOKEN)
+                .remove(KEY_EXECUTION_SOURCE)
+                .apply()
+            appendLog(context, "INFO", "执行状态已释放 token=$key source=$source")
+        }
+    }
+
+    fun enqueueDeferredDispatch(
+        context: Context,
+        action: String,
+        captcha: String,
+        token: String,
+        triggerSource: String,
+        targetOffsetDays: Long,
+        scheduledTriggerAtMillis: Long,
+        delayMs: Long
+    ): Boolean {
+        val safeDelay = delayMs.coerceAtLeast(1000L)
+        val key = token.ifBlank { "${action.hashCode()}-${scheduledTriggerAtMillis}" }
+        val uniqueName = "$DEFERRED_WORK_PREFIX${action.hashCode()}_$key"
+        val input = Data.Builder()
+            .putString(AlarmDispatchWorker.KEY_ACTION, action)
+            .putString(EXTRA_CAPTCHA, captcha)
+            .putString(EXTRA_TEST_TOKEN, token)
+            .putString(EXTRA_TRIGGER_SOURCE, "$triggerSource-deferred")
+            .putLong(EXTRA_TARGET_OFFSET_DAYS, targetOffsetDays)
+            .putLong(EXTRA_TARGET_TRIGGER_AT, scheduledTriggerAtMillis)
+            .build()
+        val request = OneTimeWorkRequestBuilder<AlarmDispatchWorker>()
+            .setInputData(input)
+            .setInitialDelay(safeDelay, TimeUnit.MILLISECONDS)
+            .build()
+        return runCatching {
+            WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.KEEP, request)
+            appendLog(context, "INFO", "已重投递延迟执行任务 unique=$uniqueName delayMs=$safeDelay action=$action source=$triggerSource")
+            true
+        }.getOrElse {
+            appendLog(context, "ERROR", "重投递延迟执行失败 action=$action source=$triggerSource message=${it.message.orEmpty()}")
+            false
+        }
+    }
+
+    private fun isExecutionInProgress(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_EXECUTION_IN_PROGRESS, false)
     }
 
     fun triggerDailyCatchUp(context: Context, reason: String) {

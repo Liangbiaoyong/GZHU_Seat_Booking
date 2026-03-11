@@ -47,11 +47,19 @@
 
 无论 Alarm / Work / Job 哪个通道被系统提前拉起，真正的预约执行都会进入“计划时间闸门”：
 
-- 若当前时刻 < 计划触发时间：等待到计划时刻再执行业务
-- 等待期间记录进度日志：`0% / 25% / 50% / 75% / 100%`
-- 到达计划时刻后再进行 token 去重，避免提前执行导致 5 秒高频探测提前耗尽
+- 若当前时刻 < 计划触发时间：采用“重投递”模式（enqueue 带 initialDelay 的短任务）
+- 当前 Worker 直接返回，不在 Worker 内长时间 delay 挂起
+- 到达计划时刻后再进行 token 去重，降低生命周期取消概率
 
-### 3.1 预检机制
+### 3.1 执行中保护（v1.3.0+）
+
+为避免 `scheduleDaily()` 在并发通道中误取消正在执行的 Work：
+
+- `tryConsumeExecutionToken` 成功后写入执行中标记
+- 执行结束统一释放标记
+- `scheduleDaily()` 检测到执行中时跳过重建，避免 `cancelUniqueWork` 误杀运行中任务
+
+### 3.2 预检机制
 
 在目标触发前 `1min` 调度 `ACTION_DAILY_PRECHECK`：
 
@@ -65,7 +73,7 @@
 - 任一通道缺失（Alarm/Work/Job）会自动重建
 - 去重命中分支也会执行通道健康检查与重建
 
-### 3.2 去重机制
+### 3.3 去重机制
 
 通过 `Scheduler.tryConsumeExecutionToken` 对同一 token 仅消费一次，防止多通道重复执行。
 
@@ -74,10 +82,11 @@
 `Scheduler` 触发后统一进入 `ReserveTaskRunner.run(...)`：
 
 - `ACTION_DAILY`
-  - 计划时间闸门等待
+  - 计划时间闸门重投递
   - 去重
   - 调 `ReservationEngine.runForTomorrowBatch`
   - 遇到 `Unable to resolve host` 进入 `5s` 一次、最长 `5min` 的网络恢复重试
+  - 若任务被系统取消，单独记录 WARN 取消路径（等待/执行/DNS），不写失败记录面板
   - 执行后重排下一次每日任务，并刷新三通道状态
 - `ACTION_DAILY_PRECHECK`
   - 调 `ReservationEngine.warmupSession`
