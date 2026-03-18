@@ -19,7 +19,7 @@ object ReservationResultPipeline {
             app.logRepository.append("INFO", "结果入库跳过：scene=$scene title=$title total=0")
             return Summary(successCount = 0, failCount = 0)
         }
-        val panelResults = collapseTransientFrequencyFailures(results)
+        val panelResults = normalizeForReporting(results)
         app.reservationResultRepository.append(panelResults)
         val successCount = panelResults.count { it.success }
         val failCount = panelResults.size - successCount
@@ -41,6 +41,10 @@ object ReservationResultPipeline {
             "结果入库：scene=$scene title=$title total=${panelResults.size} success=$successCount fail=$failCount"
         )
         return Summary(successCount = successCount, failCount = failCount)
+    }
+
+    fun normalizeForReporting(results: List<ReservationResult>): List<ReservationResult> {
+        return collapseTransientFrequencyFailures(results)
     }
 
     private fun collapseTransientFrequencyFailures(results: List<ReservationResult>): List<ReservationResult> {

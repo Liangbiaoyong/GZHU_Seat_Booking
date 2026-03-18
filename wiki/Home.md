@@ -13,7 +13,7 @@
 
 - 应用名称：GZHU Seat Booking
 - Android 包名：`com.gzhu.seatbooking.app`
-- 当前版本：`1.3.0`
+- 当前版本：`1.3.1`
 - 调度通道：`AlarmManager + WorkManager + JobScheduler`
 - 自动重试参数：`30 轮 * 2 秒`
 

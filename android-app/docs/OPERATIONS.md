@@ -20,7 +20,7 @@
 
 示例：
 
-`GZHU_SeatBooking_debug_v1.3.0_30.apk`
+`GZHU_SeatBooking_debug_v1.3.1_31.apk`
 
 推荐输出目录：
 
@@ -55,10 +55,10 @@ git push -u origin main
 1. 创建 Release 并上传 APK（建议同时上传签名 release 与签名 debug）：
 
 ```powershell
-gh release create v1.3.0 \
-    android-app/app/build/outputs/apk/release/GZHU_SeatBooking_release_v1.3.0_30.apk \
-    android-app/app/build/outputs/apk/debug/GZHU_SeatBooking_debug_v1.3.0_30.apk \
-    --title "v1.3.0" \
+gh release create v1.3.1 \
+    android-app/app/build/outputs/apk/release/GZHU_SeatBooking_release_v1.3.1_31.apk \
+    android-app/app/build/outputs/apk/debug/GZHU_SeatBooking_debug_v1.3.1_31.apk \
+    --title "v1.3.1" \
     --notes "signed release + signed debug"
 ```
 
