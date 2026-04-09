@@ -108,7 +108,7 @@ fun MainScreen(vm: AppViewModel) {
                 Tab(
                     selected = pagerState.currentPage == 2,
                     onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
-                    text = { Text("守护") }
+                    text = { Text("功能") }
                 )
                 Tab(
                     selected = pagerState.currentPage == 3,
@@ -148,9 +148,10 @@ fun MainScreen(vm: AppViewModel) {
                         dailyServiceState = state.dailyServiceState
                     )
 
-                    2 -> SurvivalTab(
+                    2 -> FeatureTab(
                         config = state.config,
-                        onBasicConfigChange = vm::updateBasicConfig
+                        onSurvivalNotifyEnabledChange = { vm.updateSurvivalNotifyConfig(enabled = it) },
+                        onSurvivalNotifyTimeChange = { vm.updateSurvivalNotifyConfig(notifyTime = it) }
                     )
 
                     else -> LogsTab(
@@ -572,6 +573,51 @@ private fun validateTimeInput(value: String): String? {
     val matcher = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
     if (!matcher.matches(value)) return "时间无效，请输入 00:00-23:59"
     return null
+}
+
+@Composable
+private fun FeatureTab(
+    config: AppConfig,
+    onSurvivalNotifyEnabledChange: (Boolean) -> Unit,
+    onSurvivalNotifyTimeChange: (String) -> Unit
+) {
+    val notifyTimeError = validateTimeInput(config.survivalNotifyTime)
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("功能设置", style = MaterialTheme.typography.titleMedium)
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("软件存活监测通知", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = config.survivalNotifyEnabled,
+                        onCheckedChange = onSurvivalNotifyEnabledChange
+                    )
+                }
+                OutlinedTextField(
+                    value = config.survivalNotifyTime,
+                    onValueChange = { onSurvivalNotifyTimeChange(sanitizeTimeInput(it)) },
+                    label = { Text("通知时间(HH:mm)") },
+                    placeholder = { Text("00:00") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = notifyTimeError != null,
+                    supportingText = {
+                        notifyTimeError?.let {
+                            Text(it)
+                        } ?: Text("将推送三种状态：全部存活、部分存活、全部失效")
+                    }
+                )
+                Text("用于每日汇报Alarm/Work/Job三类定时服务状态", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
 }
 
 @Composable

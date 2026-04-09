@@ -19,55 +19,15 @@ object ReserveNotifier {
     private const val SURVIVAL_CHANNEL_ID = "survival_monitor_channel"
     private const val SURVIVAL_CHANNEL_NAME = "存活监测通知"
 
-    fun notifySurvivalAction(context: Context, title: String, message: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!granted) {
-                appendLog(context, "ERROR", "通知发送失败：缺少POST_NOTIFICATIONS权限")
-                return
-            }
-        }
-        
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(SURVIVAL_CHANNEL_ID, SURVIVAL_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT)
-            manager.createNotificationChannel(channel)
-        }
-        
-        val notification = NotificationCompat.Builder(context, SURVIVAL_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
-            
-        manager.notify("survival".hashCode(), notification)
-        appendLog(context, "INFO", "存活监测通知已发送：$message")
-    }
-
     fun notifyReservationResult(context: Context, triggerSource: String, titlePrefix: String, results: List<ReservationResult>) {
         val reportResults = ReservationResultPipeline.normalizeForReporting(results)
         val success = reportResults.filter { it.success }
         val fail = reportResults.size - success.size
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!granted) {
-                appendLog(context, "ERROR", "通知发送失败：缺少POST_NOTIFICATIONS权限，source=$triggerSource")
-                return
-            }
-        }
+        if (!hasNotificationPermission(context, triggerSource)) return
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        ensureChannel(manager)
+        ensureResultChannel(manager)
 
         val detail = if (reportResults.isEmpty()) {
             "本次无可执行预约任务（通常是明日未启用任何时段）"
@@ -106,11 +66,88 @@ object ReserveNotifier {
         )
     }
 
-    private fun ensureChannel(manager: NotificationManager) {
+    fun notifySurvivalStatus(
+        context: Context,
+        triggerSource: String,
+        alarmEnabled: Boolean,
+        workEnabled: Boolean,
+        jobEnabled: Boolean,
+        notifyTime: String
+    ) {
+        if (!hasNotificationPermission(context, "survival-$triggerSource")) return
+
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        ensureSurvivalChannel(manager)
+
+        val services = listOf(
+            "AlarmManager" to alarmEnabled,
+            "WorkManager" to workEnabled,
+            "JobScheduler" to jobEnabled
+        )
+        val alive = services.filter { it.second }.map { it.first }
+        val dead = services.filterNot { it.second }.map { it.first }
+
+        val runTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+        val sourceText = readableSource(triggerSource)
+        val (title, content) = when {
+            alive.size == services.size -> {
+                "$runTime 存活监测：全部存活" to
+                    "三个定时服务全部存活：${alive.joinToString("、")}。下次通知时间：$notifyTime。来源：$sourceText"
+            }
+
+            alive.isEmpty() -> {
+                "$runTime 存活监测：全部失效" to
+                    "三个定时服务全部失效：${dead.joinToString("、")}。建议立即打开应用并重建调度。来源：$sourceText"
+            }
+
+            else -> {
+                "$runTime 存活监测：部分存活" to
+                    "存活：${alive.joinToString("、")}；失效：${dead.joinToString("、")}。请检查后台权限与省电策略。来源：$sourceText"
+            }
+        }
+
+        val notification = NotificationCompat.Builder(context, SURVIVAL_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+
+        val notifyId = (System.currentTimeMillis() % Int.MAX_VALUE).toInt().coerceAtLeast(1)
+        manager.notify(notifyId, notification)
+        appendLog(
+            context,
+            "INFO",
+            "存活监测通知已发送：source=$triggerSource alive=${alive.size} dead=${dead.size} notifyTime=$notifyTime"
+        )
+    }
+
+    private fun ensureResultChannel(manager: NotificationManager) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT)
             manager.createNotificationChannel(channel)
         }
+    }
+
+    private fun ensureSurvivalChannel(manager: NotificationManager) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(SURVIVAL_CHANNEL_ID, SURVIVAL_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun hasNotificationPermission(context: Context, triggerSource: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            appendLog(context, "ERROR", "通知发送失败：缺少POST_NOTIFICATIONS权限，source=$triggerSource")
+        }
+        return granted
     }
 
     private fun appendLog(context: Context, level: String, message: String) {

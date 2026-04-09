@@ -24,6 +24,7 @@ class BootReceiver : BroadcastReceiver() {
             val time = runCatching { LocalTime.parse(cfg.triggerTime) }.getOrDefault(LocalTime.of(7, 15))
             app.logRepository.append("INFO", "系统广播触发调度恢复：action=$action auto=${cfg.autoEnabled} trigger=${cfg.triggerTime}")
             Scheduler.scheduleDaily(context, time, cfg.autoEnabled)
+            SurvivalMonitor.updateSchedule(context, cfg.survivalNotifyEnabled, cfg.survivalNotifyTime)
             app.logRepository.append("INFO", "系统广播调度恢复完成：action=$action")
         }
     }

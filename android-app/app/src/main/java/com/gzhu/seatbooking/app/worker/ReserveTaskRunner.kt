@@ -28,10 +28,6 @@ object ReserveTaskRunner {
     ): RunOutcome? {
         val app = context.applicationContext as GzhuSeatBookingApp
         return when (action) {
-            SurvivalMonitor.ACTION_SURVIVAL -> {
-                executeSurvivalMonitor(context)
-                null // notification handled internally, no RunOutcome returned for pipelining
-            }
             Scheduler.ACTION_DAILY -> executeReserveAction(
                 context = context,
                 action = action,
@@ -54,32 +50,21 @@ object ReserveTaskRunner {
                 )
             }
 
+            SurvivalMonitor.ACTION_SURVIVAL -> {
+                runSurvivalMonitor(
+                    context = context,
+                    action = action,
+                    token = token,
+                    triggerSource = triggerSource
+                )
+                null
+            }
+
             else -> {
                 app.logRepository.append("ERROR", "统一执行器收到未知action=$action")
                 null
             }
         }
-    }
-
-    private suspend fun executeSurvivalMonitor(context: Context) {
-        val app = context.applicationContext as GzhuSeatBookingApp
-        val config = app.configStore.getConfig()
-        val schedulerStatus = Scheduler.queryServiceStatus(context)
-        val state = schedulerStatus.daily
-        
-        val activeCount = listOf(state.alarmEnabled, state.workEnabled, state.jobEnabled).count { it }
-        val title = "存活监测通知"
-        val message = when (activeCount) {
-            3 -> "全部存活：Alarm/Work/Job均正常运行"
-            0 -> "全部失效：所有定时服务均已失效"
-            else -> "部分存活：${if(state.alarmEnabled) "Alarm" else ""} ${if(state.workEnabled) "Work" else ""} ${if(state.jobEnabled) "Job" else ""}".trim()
-        }
-        
-        ReserveNotifier.notifySurvivalAction(context, title, message)
-        app.logRepository.append("INFO", "执行存活监测，结果：$message")
-        
-        // Re-schedule itself for tomorrow
-        SurvivalMonitor.updateSchedule(context, config.survivalNotifyEnabled, config.survivalNotifyTime)
     }
 
     private suspend fun executeReserveAction(
@@ -278,6 +263,48 @@ object ReserveTaskRunner {
         }
         app.logRepository.append("INFO", "会话预检完成，继续等待原触发时刻执行")
         return null
+    }
+
+    private suspend fun runSurvivalMonitor(
+        context: Context,
+        action: String,
+        token: String,
+        triggerSource: String
+    ) {
+        val app = context.applicationContext as GzhuSeatBookingApp
+        val config = app.configStore.getConfig()
+        if (!config.survivalNotifyEnabled) {
+            app.logRepository.append("INFO", "存活监测触发时配置为关闭，跳过通知 action=$action source=$triggerSource")
+            runCatching { SurvivalMonitor.updateSchedule(context, false, config.survivalNotifyTime) }
+            return
+        }
+
+        if (!SurvivalMonitor.tryConsumeToken(context, token)) {
+            app.logRepository.append("INFO", "存活监测去重命中，跳过重复通知 token=$token source=$triggerSource")
+            return
+        }
+
+        val status = runCatching { Scheduler.queryServiceStatus(context) }.getOrNull()
+        val daily = status?.daily
+        ReserveNotifier.notifySurvivalStatus(
+            context = context,
+            triggerSource = triggerSource,
+            alarmEnabled = daily?.alarmEnabled == true,
+            workEnabled = daily?.workEnabled == true,
+            jobEnabled = daily?.jobEnabled == true,
+            notifyTime = config.survivalNotifyTime
+        )
+
+        app.logRepository.append(
+            "INFO",
+            "存活监测执行完成：alarm=${daily?.alarmEnabled == true} work=${daily?.workEnabled == true} job=${daily?.jobEnabled == true} source=$triggerSource"
+        )
+
+        runCatching {
+            SurvivalMonitor.updateSchedule(context, config.survivalNotifyEnabled, config.survivalNotifyTime)
+        }.onFailure {
+            app.logRepository.append("ERROR", "存活监测执行后重建通知失败：${it.message.orEmpty()}")
+        }
     }
 
     private suspend fun runTomorrowBatchWithDnsRecovery(

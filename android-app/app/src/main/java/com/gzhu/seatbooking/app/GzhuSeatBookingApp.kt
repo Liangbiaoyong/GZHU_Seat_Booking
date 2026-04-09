@@ -7,6 +7,7 @@ import com.gzhu.seatbooking.app.data.local.ReservationResultRepository
 import com.gzhu.seatbooking.app.data.network.LibraryApi
 import com.gzhu.seatbooking.app.domain.ReservationEngine
 import com.gzhu.seatbooking.app.worker.Scheduler
+import com.gzhu.seatbooking.app.worker.SurvivalMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,6 +35,7 @@ class GzhuSeatBookingApp : Application() {
                 val cfg = configStore.getConfig()
                 val time = runCatching { LocalTime.parse(cfg.triggerTime) }.getOrDefault(LocalTime.of(7, 15))
                 Scheduler.scheduleDaily(this@GzhuSeatBookingApp, time, cfg.autoEnabled)
+                SurvivalMonitor.updateSchedule(this@GzhuSeatBookingApp, cfg.survivalNotifyEnabled, cfg.survivalNotifyTime)
                 logRepository.append("INFO", "应用启动自检：已重建每日调度 auto=${cfg.autoEnabled} trigger=${cfg.triggerTime}")
             }.onFailure {
                 logRepository.append("ERROR", "应用启动自检失败：${it.message.orEmpty()}")

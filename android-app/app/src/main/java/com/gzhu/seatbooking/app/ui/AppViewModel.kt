@@ -21,6 +21,7 @@ import com.gzhu.seatbooking.app.data.model.buildDefaultSlotByIndex
 import com.gzhu.seatbooking.app.domain.ReservationResultPipeline
 import com.gzhu.seatbooking.app.domain.ScheduleValidator
 import com.gzhu.seatbooking.app.worker.Scheduler
+import com.gzhu.seatbooking.app.worker.SurvivalMonitor
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -112,13 +113,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             app.logRepository.append("INFO", "自动保存基础配置")
             app.configStore.save(effectiveConfig)
-            
+
             if (current.survivalNotifyEnabled != effectiveConfig.survivalNotifyEnabled || current.survivalNotifyTime != effectiveConfig.survivalNotifyTime) {
-                runCatching { 
-                    com.gzhu.seatbooking.app.worker.SurvivalMonitor.updateSchedule(getApplication(), effectiveConfig.survivalNotifyEnabled, effectiveConfig.survivalNotifyTime)
+                runCatching {
+                    SurvivalMonitor.updateSchedule(
+                        getApplication(),
+                        effectiveConfig.survivalNotifyEnabled,
+                        effectiveConfig.survivalNotifyTime
+                    )
+                }.onSuccess {
+                    app.logRepository.append(
+                        "INFO",
+                        "存活监测通知更新完成 enabled=${effectiveConfig.survivalNotifyEnabled} time=${effectiveConfig.survivalNotifyTime}"
+                    )
+                }.onFailure {
+                    app.logRepository.append("ERROR", "存活监测通知更新失败：${it.message.orEmpty()}")
                 }
             }
-            
+
             val triggerNow = runCatching { LocalTime.parse(effectiveConfig.triggerTime) }.getOrNull()
             if (triggerNow != null && (current.autoEnabled != effectiveConfig.autoEnabled || current.triggerTime != effectiveConfig.triggerTime)) {
                 runCatching { Scheduler.scheduleDaily(getApplication(), triggerNow, effectiveConfig.autoEnabled) }
@@ -254,6 +266,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun notifyActivationRequiredForAuto() {
         _uiState.value = _uiState.value.copy(toast = "请先激活后再开启启动每日预约任务")
+    }
+
+    fun updateSurvivalNotifyConfig(enabled: Boolean? = null, notifyTime: String? = null) {
+        viewModelScope.launch {
+            val current = app.configStore.getConfig()
+            val updated = current.copy(
+                survivalNotifyEnabled = enabled ?: current.survivalNotifyEnabled,
+                survivalNotifyTime = notifyTime ?: current.survivalNotifyTime
+            )
+            if (updated == current) return@launch
+
+            app.configStore.save(updated)
+            _uiState.value = _uiState.value.copy(
+                config = updated,
+                weekServiceStates = buildWeekServiceStates(updated),
+                toast = "功能配置已自动保存"
+            )
+
+            runCatching {
+                SurvivalMonitor.updateSchedule(
+                    getApplication(),
+                    updated.survivalNotifyEnabled,
+                    updated.survivalNotifyTime
+                )
+            }.onSuccess {
+                app.logRepository.append(
+                    "INFO",
+                    "功能页更新存活通知成功 enabled=${updated.survivalNotifyEnabled} time=${updated.survivalNotifyTime}"
+                )
+            }.onFailure {
+                app.logRepository.append("ERROR", "功能页更新存活通知失败：${it.message.orEmpty()}")
+            }
+            refreshLogs()
+        }
     }
 
     private suspend fun refreshRoomAndSeatOptionsInternal() {
