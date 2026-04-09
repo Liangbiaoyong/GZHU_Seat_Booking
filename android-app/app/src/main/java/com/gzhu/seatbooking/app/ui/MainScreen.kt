@@ -76,7 +76,7 @@ import kotlinx.coroutines.launch
 fun MainScreen(vm: AppViewModel) {
     val state by vm.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val pagerState = rememberPagerState(pageCount = { 3 })
+    val pagerState = rememberPagerState(pageCount = { 4 })
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(state.toast) {
@@ -108,6 +108,11 @@ fun MainScreen(vm: AppViewModel) {
                 Tab(
                     selected = pagerState.currentPage == 2,
                     onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
+                    text = { Text("守护") }
+                )
+                Tab(
+                    selected = pagerState.currentPage == 3,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(3) } },
                     text = { Text("日志") }
                 )
             }
@@ -141,6 +146,11 @@ fun MainScreen(vm: AppViewModel) {
                         serviceText = state.serviceMonitorText,
                         weekStates = state.weekServiceStates,
                         dailyServiceState = state.dailyServiceState
+                    )
+
+                    2 -> SurvivalTab(
+                        config = state.config,
+                        onBasicConfigChange = vm::updateBasicConfig
                     )
 
                     else -> LogsTab(

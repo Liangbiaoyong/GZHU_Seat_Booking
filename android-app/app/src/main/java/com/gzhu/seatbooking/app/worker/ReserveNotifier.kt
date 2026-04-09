@@ -16,6 +16,39 @@ import java.time.format.DateTimeFormatter
 object ReserveNotifier {
     private const val CHANNEL_ID = "reserve_result_channel"
     private const val CHANNEL_NAME = "预约结果通知"
+    private const val SURVIVAL_CHANNEL_ID = "survival_monitor_channel"
+    private const val SURVIVAL_CHANNEL_NAME = "存活监测通知"
+
+    fun notifySurvivalAction(context: Context, title: String, message: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                appendLog(context, "ERROR", "通知发送失败：缺少POST_NOTIFICATIONS权限")
+                return
+            }
+        }
+        
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(SURVIVAL_CHANNEL_ID, SURVIVAL_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT)
+            manager.createNotificationChannel(channel)
+        }
+        
+        val notification = NotificationCompat.Builder(context, SURVIVAL_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+            
+        manager.notify("survival".hashCode(), notification)
+        appendLog(context, "INFO", "存活监测通知已发送：$message")
+    }
 
     fun notifyReservationResult(context: Context, triggerSource: String, titlePrefix: String, results: List<ReservationResult>) {
         val reportResults = ReservationResultPipeline.normalizeForReporting(results)

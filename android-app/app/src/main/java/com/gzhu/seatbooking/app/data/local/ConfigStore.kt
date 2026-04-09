@@ -47,6 +47,8 @@ class ConfigStore(private val context: Context) {
         root.put("token", config.token)
         root.put("cookieHeader", config.cookieHeader)
         root.put("lastRunAt", config.lastRunAt)
+        root.put("survivalNotifyEnabled", config.survivalNotifyEnabled)
+        root.put("survivalNotifyTime", config.survivalNotifyTime)
         val week = JSONObject()
         config.weekSchedule.forEach { (day, items) ->
             val arr = org.json.JSONArray()
@@ -110,7 +112,9 @@ class ConfigStore(private val context: Context) {
             weekSchedule = week,
             token = root.optString("token", ""),
             cookieHeader = root.optString("cookieHeader", ""),
-            lastRunAt = root.optString("lastRunAt", "")
+            lastRunAt = root.optString("lastRunAt", ""),
+            survivalNotifyEnabled = root.optBoolean("survivalNotifyEnabled", false),
+            survivalNotifyTime = root.optString("survivalNotifyTime", "00:00")
         )
     }
 }

@@ -112,6 +112,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             app.logRepository.append("INFO", "自动保存基础配置")
             app.configStore.save(effectiveConfig)
+            
+            if (current.survivalNotifyEnabled != effectiveConfig.survivalNotifyEnabled || current.survivalNotifyTime != effectiveConfig.survivalNotifyTime) {
+                runCatching { 
+                    com.gzhu.seatbooking.app.worker.SurvivalMonitor.updateSchedule(getApplication(), effectiveConfig.survivalNotifyEnabled, effectiveConfig.survivalNotifyTime)
+                }
+            }
+            
             val triggerNow = runCatching { LocalTime.parse(effectiveConfig.triggerTime) }.getOrNull()
             if (triggerNow != null && (current.autoEnabled != effectiveConfig.autoEnabled || current.triggerTime != effectiveConfig.triggerTime)) {
                 runCatching { Scheduler.scheduleDaily(getApplication(), triggerNow, effectiveConfig.autoEnabled) }

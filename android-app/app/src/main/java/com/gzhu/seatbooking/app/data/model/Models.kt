@@ -36,7 +36,9 @@ data class AppConfig(
     val weekSchedule: Map<DayOfWeek, List<TimeRangeConfig>> = DayOfWeek.entries.associateWith { listOf(buildDefaultSlotByIndex(0)) },
     val token: String = "",
     val cookieHeader: String = "",
-    val lastRunAt: String = ""
+    val lastRunAt: String = "",
+    val survivalNotifyEnabled: Boolean = false,
+    val survivalNotifyTime: String = "00:00"
 )
 
 data class ReservationRequest(
