@@ -1,4 +1,17 @@
-﻿# GZHU Seat Booking
+﻿<div align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=timeGradient&height=250&section=header&text=GZHU%20Seat%20Booking&fontSize=60&fontAlignY=35&desc=Guangzhou%20University%20Library%20Automated%20Booking%20App&descAlignY=55&descAlign=50" alt="header" width="100%" />
+</div>
+
+<div align="center">
+
+[![Android](https://img.shields.io/badge/Platform-Android-3DDC84.svg?style=for-the-badge&logo=android&logoColor=white)](https://www.android.com/)
+[![Kotlin](https://img.shields.io/badge/Language-Kotlin-7F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4.svg?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Python](https://img.shields.io/badge/Scripts-Python-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+
+</div>
+
+# GZHU Seat Booking
 
 GZHU Seat Booking（Android 主工程 + 认证研究脚本）。
 
